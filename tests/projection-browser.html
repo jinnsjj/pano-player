@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Projection pixel regression</title>
+<style>body { background: #202020; color: white; font: 14px sans-serif; } canvas { width: 640px; max-width: 100%; display: block; }</style>
+<h1>Projection pixel regression</h1><output id="result">Running</output>
+<h2>GPU EAC to ERP</h2><canvas id="actual"></canvas><h2>FFmpeg reference</h2><canvas id="expected"></canvas>
+<script type="module">
+import { PanoProjection } from '/projection.js';
+import '/view.js';
+const result = document.getElementById('result');
+try {
+  const images = await Promise.all([0, 1].map(async index => {
+    const image = new Image(); image.src = '/source/' + index; await image.decode(); return image;
+  }));
+  const source = document.createElement('canvas'); source.width = images[0].width; source.height = images[0].height;
+  source.getContext('2d').drawImage(images[0], 0, 0);
+  const actual = document.getElementById('actual'), expected = document.getElementById('expected');
+  const projector = new PanoProjection(actual, source); projector.configure('eac', 'mono'); projector.render(1);
+  expected.width = actual.width; expected.height = actual.height;
+  const ctx = expected.getContext('2d'); ctx.drawImage(images[1], 0, 0, expected.width, expected.height);
+  const reference = ctx.getImageData(0, 0, expected.width, expected.height).data;
+  const readback = document.createElement('canvas'); readback.width = actual.width; readback.height = actual.height;
+  const read = readback.getContext('2d'); read.drawImage(actual, 0, 0);
+  const pixels = read.getImageData(0, 0, actual.width, actual.height).data;
+  let error = 0, nonblack = 0;
+  for (let i = 0; i < pixels.length; i += 4) {
+    for (let c = 0; c < 3; c++) error += Math.abs(pixels[i + c] - reference[i + c]);
+    if (pixels[i] + pixels[i + 1] + pixels[i + 2] > 20) nonblack++;
+  }
+  const mae = error / (pixels.length / 4 * 3);
+  if (mae > 4 || nonblack < actual.width * actual.height * .9) throw new Error('EAC MAE=' + mae + ', nonblack=' + nonblack);
+  const host = document.createElement('div'); host.style.cssText = 'position:relative;width:640px;height:360px'; document.body.append(host);
+  const map = document.createElement('canvas'); map.width = 140; map.height = 70;
+  const video = { element: source, displayElement: actual, readyState: 4, currentTime: 0 };
+  const view = new window.FoaView(host, video, map, { setOrientation() {} });
+  view.configure(true, true, '360');
+  const sample = () => {
+    readback.width = 64; readback.height = 36; read.drawImage(host.querySelector('canvas'), 0, 0, 64, 36);
+    return read.getImageData(0, 0, 64, 36).data;
+  };
+  const front = sample();
+  view.orient(.9, .2); const turned = sample();
+  let changed = 0, lit = 0;
+  for (let i = 0; i < front.length; i += 4) {
+    if (front[i] + front[i + 1] + front[i + 2] > 20) lit++;
+    if (Math.abs(front[i] - turned[i]) > 5) changed++;
+  }
+  if (lit < 2000 || changed < 1000) throw new Error('Spatial blank/static: ' + lit + '/' + changed);
+  const replacement = document.createElement('canvas'); video.displayElement = replacement;
+  for (const [width, color, channel] of [[320, '#00ff00', 1], [640, '#ff0000', 0], [160, '#0000ff', 2]]) {
+    replacement.width = width; replacement.height = width / 2;
+    const draw = replacement.getContext('2d'); draw.fillStyle = color; draw.fillRect(0, 0, width, width / 2);
+    view.configure(true, true, '360');
+    if (sample()[channel] !== 255) throw new Error('Paused Spatial source resize failed: ' + width);
+  }
+  view.dispose(); host.remove();
+  // Deliberately distinct eyes catch wrong-eye selection and flipped Y coordinates.
+  for (const layout of ['sbs', 'tb']) {
+    source.width = 160; source.height = 80;
+    const draw = source.getContext('2d'); draw.fillStyle = '#00ff00'; draw.fillRect(0, 0, 160, 80);
+    draw.fillStyle = '#ff0000'; draw.fillRect(0, 0, layout === 'sbs' ? 80 : 160, layout === 'tb' ? 40 : 80);
+    draw.fillStyle = '#0000ff'; draw.fillRect(0, 0, 20, 20);
+    const output = document.createElement('canvas'), cropper = new PanoProjection(output, source);
+    cropper.configure('360', layout); cropper.render(1);
+    readback.width = output.width; readback.height = output.height; read.drawImage(output, 0, 0);
+    const topLeft = read.getImageData(5, 5, 1, 1).data, center = read.getImageData(output.width / 2, output.height / 2, 1, 1).data;
+    if (topLeft[2] !== 255 || center[0] !== 255 || center[1] !== 0) throw new Error('Wrong eye/orientation: ' + layout);
+    cropper.dispose();
+  }
+  result.textContent = 'PASS: EAC vs FFmpeg MAE=' + mae.toFixed(3) + ', nonblack=' + nonblack + '; SBS left / TB top pixels correct; Spatial lit=' + lit + ', turned=' + changed + '.';
+  projector.dispose();
+} catch (error) { result.textContent = 'FAIL: ' + error.message; }
+</script></html>

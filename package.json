@@ -1,0 +1,111 @@
+{
+  "name": "pano-player",
+  "displayName": "PanoPlayer",
+  "description": "Play ERP and EAC panoramas, mono or stereo video, with spatial FOA audio and live PowerMap overlays.",
+  "version": "0.4.8",
+  "icon": "media/icon.png",
+  "publisher": "JunjieShi",
+  "author": "Junjie Shi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jinnsjj/pano-player.git"
+  },
+  "homepage": "https://github.com/jinnsjj/pano-player#readme",
+  "bugs": {
+    "url": "https://github.com/jinnsjj/pano-player/issues"
+  },
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "FOA",
+    "Ambisonics",
+    "PowerMap",
+    "360",
+    "spatial audio"
+  ],
+  "main": "./src/extension.cjs",
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": false
+  },
+  "activationEvents": [
+    "onCustomEditor:foaPowermap.player"
+  ],
+  "scripts": {
+    "build": "node build.cjs",
+    "test": "node build.cjs && node --test tests/*.test.cjs",
+    "vscode:prepublish": "node build.cjs",
+    "package": "npx @vscode/vsce package --no-dependencies --githubBranch main"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "foaPowermap.open",
+        "title": "PanoPlayer: Open Media"
+      },
+      {
+        "command": "foaPowermap.clearCache",
+        "title": "PanoPlayer: Clear Playback Cache"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "foaPowermap.player",
+        "displayName": "PanoPlayer",
+        "selector": [
+          {
+            "filenamePattern": "*.mp4"
+          },
+          {
+            "filenamePattern": "*.webm"
+          },
+          {
+            "filenamePattern": "*.wav"
+          },
+          {
+            "filenamePattern": "*.WAV"
+          },
+          {
+            "filenamePattern": "*.mov"
+          },
+          {
+            "filenamePattern": "*.MOV"
+          },
+          {
+            "filenamePattern": "*.mkv"
+          },
+          {
+            "filenamePattern": "*.MKV"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "foaPowermap.open",
+          "when": "(resourceScheme == file || resourceScheme == vscode-remote) && resourceExtname =~ /\\.(mp4|webm|wav|mov|mkv)$/i",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "lucide": "1.45.0",
+    "mediabunny": "1.56.2",
+    "opus-decoder": "0.7.12"
+  }
+}

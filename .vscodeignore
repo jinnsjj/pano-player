@@ -1,0 +1,16 @@
+tests/**
+.impeccable/**
+**/__pycache__/**
+**/*.pyc
+*.vsix
+node_modules/**
+.vscode/**
+output/**
+build.cjs
+src/browser-monitor.js
+src/icons.js
+src/powermap/**
+src/core.cjs
+src/media.cjs
+src/runtime.cjs
+python/**
