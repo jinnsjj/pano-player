@@ -1,0 +1,7 @@
+{
+  "name": "foa-powermap-test-harness",
+  "publisher": "local-test",
+  "version": "0.0.1",
+  "engines": { "vscode": "^1.84.0" },
+  "main": "index.cjs"
+}
