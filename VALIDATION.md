@@ -1,5 +1,13 @@
 # Validation
 
+## Marketplace Publisher Configuration, 2026-09-19
+
+Source version: 0.4.8. The first Marketplace package uses the existing publisher
+`shijunjie`, with display name `Junjie Shi`, as confirmed by the user. The extension
+ID is now `shijunjie.pano-player`. Earlier local VSIX packages used `JunjieShi`;
+uninstall those before enabling this package to avoid duplicate editor commands.
+This configuration entry alone is not evidence of Marketplace approval.
+
 ## GitHub Publication And README Images, 2026-09-19
 
 Source version: 0.4.8. Repository: https://github.com/jinnsjj/pano-player.

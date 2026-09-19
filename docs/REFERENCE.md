@@ -10,10 +10,9 @@ MUSIC direction map and binaural audio for four-channel FOA sources.
 Install the current `pano-player-*.vsix` using **Extensions: Install from VSIX...**,
 then right-click media and select **Open With > PanoPlayer**.
 **PanoPlayer: Open Media** also opens local or workspace-host files.
-The VSIX publisher identifier is `JunjieShi`, so the extension ID is
-`JunjieShi.pano-player`. For a VSIX-only installation the developer label uses
-this identifier (spaces are not supported); `author` metadata is `Junjie Shi`.
-Uninstall `spatial-audio-tools.pano-player` or the older
+The Marketplace publisher identifier is `shijunjie`, so the extension ID is
+`shijunjie.pano-player`. The publisher display name and author are `Junjie Shi`.
+Uninstall the previous local `JunjieShi.pano-player`, `spatial-audio-tools.pano-player` or the older
 `spatial-audio-tools.foa-powermap-player` before using the new package. Internal
 `foaPowermap.*` command/editor IDs remain stable for existing editor associations;
 do not enable the old and new packages together.

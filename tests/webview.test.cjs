@@ -51,7 +51,7 @@ test('WAV is registered in the editor selector and open command', () => {
   assert.match(manifest.contributes.menus['explorer/context'][0].when, /wav/);
   assert.equal(manifest.name, 'pano-player');
   assert.equal(manifest.displayName, 'PanoPlayer');
-  assert.equal(manifest.publisher, 'JunjieShi');
+  assert.equal(manifest.publisher, 'shijunjie');
   assert.equal(manifest.author, 'Junjie Shi');
   assert.equal(manifest.icon, 'media/icon.png');
   const icon = require('node:fs').readFileSync(require.resolve('../' + manifest.icon));
