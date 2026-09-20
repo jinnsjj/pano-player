@@ -15,18 +15,12 @@ For manual installation, use **Extensions: Install from VSIX...** with the curre
 **PanoPlayer: Open Media** also opens local or workspace-host files.
 The Marketplace publisher identifier is `shijunjie`, so the extension ID is
 `shijunjie.pano-player`. The publisher display name and author are `Junjie Shi`.
-Uninstall the previous local `JunjieShi.pano-player`, `spatial-audio-tools.pano-player` or the older
-`spatial-audio-tools.foa-powermap-player` before using the new package.
-Updates within `shijunjie.pano-player` keep the same extension identity.
-The editor view type remains `foaPowermap.player` to preserve existing editor
-associations; do not enable the old and new packages together.
 MOV and MKV are also offered in Open With, the context menu and the file picker;
 they use the existing playback pipeline and codec restrictions unchanged.
 
 Requires VS Code 1.84+ with a Node workspace extension host, Web Audio and a
 browser with WebCodecs video decoding. Perspective, EAC and stereo cropping require WebGL2.
 No FFmpeg, FFprobe, Python, NumPy, SciPy or OpenCV installation is needed.
-Old executable-path settings are no longer used.
 
 The bundled libav.js AAC decoder is JavaScript/WebAssembly, not an OS-specific
 FFmpeg executable. The same codec files can run on compatible Windows, macOS and
@@ -42,12 +36,10 @@ required, so browser-only vscode.dev without a remote host is not supported.
 | PanoPlayer: Open Media | `panoPlayer.open` |
 | PanoPlayer: Clear Playback Cache | `panoPlayer.clearCache` |
 
-Starting with 0.4.9, update custom keybindings or scripts that used
-`foaPowermap.open` or `foaPowermap.clearCache`; those command IDs are no longer
-registered. The Explorer context menu uses `panoPlayer.open`. The editor view type
-`foaPowermap.player` is not a command ID and has not changed.
-Clear Playback Cache only removes legacy 0.1.x proxy files; the streaming player
-does not create them or run cleanup during preview startup.
+The Explorer context menu uses `panoPlayer.open`. The editor view type is
+`foaPowermap.player`, which is separate from the command IDs.
+Clear Playback Cache removes previously generated playback proxy files. The
+streaming player does not create these files or run cleanup during preview startup.
 
 ## Streaming Playback
 
