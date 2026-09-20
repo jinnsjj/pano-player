@@ -1,6 +1,6 @@
 (async () => {
   const frame = document.getElementById('active-frame');
-  const w = frame.contentWindow; const d = w.document; const p = w.__FOA_POWERMAP__;
+  const w = frame.contentWindow; const d = w.document; const p = w.__PANO_PLAYER__;
   const assert = (ok, message) => { if (!ok) throw new Error(message); };
   const choose = (id, value) => { if (id === 'view') { d.getElementById(`view-${value}`).click(); return; } const el = d.getElementById(id); el.value = value; el.dispatchEvent(new w.Event('change')); };
   choose('view', 'spatial');
@@ -54,6 +54,6 @@
   const oldWidth = frame.style.width; frame.style.width = '390px';
   await new Promise(resolve => setTimeout(resolve, 200));
   assert(d.documentElement.scrollWidth <= w.innerWidth && pixels() > 100, 'Narrow view blank or overflowing');
-  w.__FOA_VIEW_RESTORE__ = () => { frame.style.width = oldWidth; };
+  w.__PANO_PLAYER_VIEW_RESTORE__ = () => { frame.style.width = oldWidth; };
   return { front, rear180, rear360, lookLeft, lookRight, state: p.getState() };
 })()

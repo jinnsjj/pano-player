@@ -1,6 +1,6 @@
 (async () => {
   let frame, w, d;
-  const state = () => { frame = document.getElementById('active-frame'); w = frame.contentWindow; d = w.document; return w.__FOA_POWERMAP__.getState(); };
+  const state = () => { frame = document.getElementById('active-frame'); w = frame.contentWindow; d = w.document; return w.__PANO_PLAYER__.getState(); };
   const wait = async predicate => { const start = Date.now(); while (!predicate()) { if (Date.now() - start > 60000) throw new Error(d.body.innerText); await new Promise(r => setTimeout(r, 100)); } };
   const assert = (ok, message) => { if (!ok) throw new Error(message); };
   const before = state();
@@ -33,7 +33,7 @@
   } else {
     assert(video.x === canvas.x && video.y === canvas.y && video.width === canvas.width && video.height === canvas.height, 'Overlay misaligned');
   }
-  w.__FOA_QA_LAYOUT__ = layout;
-  w.__FOA_QA_RESTORE__ = () => { frame.style.width = originalWidth; frame.style.height = originalHeight; };
+  w.__PANO_PLAYER_QA_LAYOUT__ = layout;
+  w.__PANO_PLAYER_QA_RESTORE__ = () => { frame.style.width = originalWidth; frame.style.height = originalHeight; };
   return { before, changed, restored: state(), layout };
 })()

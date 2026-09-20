@@ -34,8 +34,8 @@ async function resolveRuntime(settings = {}, { env = process.env, home = os.home
       }
     }
     failures.forEach(log);
-    if (explicit) throw new Error(`Invalid foaPowermap.${key}: ${failures[0]}. ${help}`);
-    throw new Error(`${label} not found or missing dependencies. ${help} Existing installations are detected automatically; a custom path can be set in foaPowermap.${key}. See FOA PowerMap Output for attempted paths.`);
+    if (explicit) throw new Error(`Invalid ${key}: ${failures[0]}. ${help}`);
+    throw new Error(`${label} not found or missing dependencies. ${help} Existing installations are detected automatically; pass a custom ${key} to the reference runner. See its log for attempted paths.`);
   }
   const ffmpegPath = await choose('ffmpegPath', 'FFmpeg', ['auto', 'ffmpeg'], candidates('ffmpeg'), ['-version'], 'Install FFmpeg with libx264 and libmp3lame support.');
   const ffprobePath = await choose('ffprobePath', 'FFprobe', ['auto', 'ffprobe'],

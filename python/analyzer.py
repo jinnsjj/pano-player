@@ -1,4 +1,4 @@
-"""Resident, bounded JSON-lines adapter for the bundled FOA PowerMap skill."""
+"""Resident, bounded JSON-lines adapter for the reference PowerMap analyzer."""
 import argparse
 import base64
 import json

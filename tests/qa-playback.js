@@ -2,7 +2,7 @@
   const w = document.getElementById('active-frame').contentWindow;
   const d = w.document;
   const v = d.getElementById('video');
-  const state = () => w.__FOA_POWERMAP__.getState();
+  const state = () => w.__PANO_PLAYER__.getState();
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const wait = async predicate => {
     const start = Date.now();
@@ -18,13 +18,13 @@
   const began = performance.now();
   const start = state();
   const samples = [];
-  w.__FOA_QA_SAMPLES__ = samples;
+  w.__PANO_PLAYER_QA_SAMPLES__ = samples;
   let audioPeak = null;
   let audioContext;
   let ownsAudioContext = false;
   let analyzer;
   try {
-    const monitor = w.__FOA_POWERMAP__.monitor;
+    const monitor = w.__PANO_PLAYER__.monitor;
     audioContext = monitor?.context || new w.AudioContext();
     ownsAudioContext = !monitor?.context;
     await audioContext.resume();
@@ -67,7 +67,7 @@
   d.getElementById('enabled').click();
   await wait(() => state().mappedAt !== null);
   const quality = v.getVideoPlaybackQuality();
-  if (w.__FOA_POWERMAP__.monitor?.output && analyzer) w.__FOA_POWERMAP__.monitor.output.disconnect(analyzer);
+  if (w.__PANO_PLAYER__.monitor?.output && analyzer) w.__PANO_PLAYER__.monitor.output.disconnect(analyzer);
   if (ownsAudioContext) await audioContext?.close();
   const result = { elapsed: (performance.now() - began) / 1000, start, finish, alphaPixels,
     audioPeak, audioDecodedBytes: v.webkitAudioDecodedByteCount,
@@ -75,7 +75,7 @@
     maxAudioDrift: Math.max(...samples.map(s => Math.abs(s.listening?.drift || 0))),
     seekBack, seekForward, samples };
   assert(typeof audioPeak === 'number' && audioPeak > 0, 'No audible output captured');
-  if (w.__FOA_POWERMAP__.monitor) assert(result.maxAudioDrift < .15, 'Binaural clock drift');
-  w.__FOA_QA_RESULT__ = result;
+  if (w.__PANO_PLAYER__.monitor) assert(result.maxAudioDrift < .15, 'Binaural clock drift');
+  w.__PANO_PLAYER_QA_RESULT__ = result;
   return result;
 })()

@@ -8,7 +8,7 @@ const vm = require('node:vm');
 const { buildSync } = require('esbuild');
 
 test('host media reads exact bounded offsets from only its owned file', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'foa-range-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pano-player-range-'));
   const file = path.join(dir, 'source');
   const bytes = Buffer.alloc(600000);
   for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;

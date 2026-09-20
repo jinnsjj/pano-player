@@ -1,5 +1,5 @@
 {
-  "name": "foa-powermap-test-harness",
+  "name": "pano-player-test-harness",
   "publisher": "local-test",
   "version": "0.0.1",
   "engines": { "vscode": "^1.84.0" },

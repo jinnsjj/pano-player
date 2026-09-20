@@ -1,6 +1,6 @@
 # PanoPlayer Reference
 
-Technical notes for version 0.4.9. See the [README](../README.md) for features and screenshots.
+Technical notes for version 0.4.12. See the [README](../README.md) for features and screenshots.
 
 ## Install
 
@@ -12,14 +12,22 @@ Open media with **Open With > PanoPlayer** or **PanoPlayer: Open Media**.
 Requires VS Code 1.84+, a Node workspace extension host, Web Audio and WebCodecs.
 Perspective, EAC and single-eye cropping require WebGL2. No external FFmpeg or Python is needed.
 
+To use PanoPlayer by default for MP4 and WebM, add these associations to your settings:
+
+```json
+{
+  "workbench.editorAssociations": {
+    "*.mp4": "panoPlayer.player",
+    "*.webm": "panoPlayer.player"
+  }
+}
+```
+
 ## Commands
 
 | Command Palette title | Command ID |
 | --- | --- |
 | PanoPlayer: Open Media | `panoPlayer.open` |
-| PanoPlayer: Clear Playback Cache | `panoPlayer.clearCache` |
-
-Clear Playback Cache removes previously generated proxy files; streaming playback creates none.
 
 ## Media And Audio
 
@@ -34,14 +42,22 @@ Clear Playback Cache removes previously generated proxy files; streaming playbac
 
 | Setting | Behavior |
 | --- | --- |
+| Auto (default) | Infer 180 ERP for a single-eye aspect ratio from 0.9 to 1.1; otherwise use 360 ERP |
 | 360 ERP | Full panorama; non-2:1 frames are accepted and the overlay stretches to match |
 | 180 ERP | Front hemisphere with a blank rear hemisphere, keeping the full 360-degree PowerMap scale |
 | EAC (3x2) | FFmpeg-compatible cube layout; arbitrary face arrangements are unsupported |
 | Mono / Stereo SBS / Stereo TB | Full frame / left eye / top eye; playback is monoscopic |
 
-Aspect ratios from 0.9 to 1.1 default to 180 ERP; other ratios default to 360 ERP.
-This is a heuristic: select projection and stereo layout explicitly when needed.
-Projection and channel order are not remembered; overlay enablement and opacity are.
+Auto reevaluates each file and selected stereo layout. This is a heuristic, not projection
+detection; choose EAC or override ERP manually when needed.
+
+All player settings are remembered across files and restarts in the same extension host:
+projection, layout, view, camera direction/FOV, overlay, opacity, monitor, channel order,
+normalization, volume and mute. **Restore default settings** resets these immediately,
+without seeking or pausing. Defaults include Auto, Mono, Panorama, WYZX/SN3D, Binaural,
+overlay on at 75%, volume at 70%, unmuted, and a forward-facing 72-degree FOV.
+Mono/stereo Bypass does not overwrite saved FOA settings. Playback position, play/pause
+and full-screen state are not preferences. Local and remote hosts keep separate settings.
 
 **Panorama** shows the unfolded image. **Perspective** supports dragging or arrow keys
 to look around, scrolling or +/- to change FOV, and Home/Reset to face forward.

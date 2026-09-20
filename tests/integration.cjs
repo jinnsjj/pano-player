@@ -1,16 +1,16 @@
-// Run explicitly with FOA_TEST_VIDEO pointing at a four-channel WAV or video fixture.
+// Run explicitly with PANO_PLAYER_TEST_VIDEO pointing at a four-channel WAV or video fixture.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { runProcess, prepareMedia, probeFile, AnalyzerClient } = require('../src/media.cjs');
 (async () => {
-  const input = process.env.FOA_TEST_VIDEO;
-  if (!input) throw new Error('Set FOA_TEST_VIDEO');
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'foa-integration-'));
+  const input = process.env.PANO_PLAYER_TEST_VIDEO;
+  if (!input) throw new Error('Set PANO_PLAYER_TEST_VIDEO');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'pano-player-integration-'));
   const settings = { ffmpegPath: process.env.FFMPEG || 'ffmpeg', ffprobePath: process.env.FFPROBE || 'ffprobe', pythonPath: process.env.PYTHON || 'python3' };
   let client;
-  const order = process.env.FOA_TEST_ORDER || 'WYZX';
+  const order = process.env.PANO_PLAYER_TEST_ORDER || 'WYZX';
   try {
     const media = await prepareMedia(input, root, settings, order);
     const proxy = await probeFile(media.proxy, settings);

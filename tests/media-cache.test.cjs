@@ -8,7 +8,7 @@ const { EventEmitter } = require('node:events');
 const { createHash } = require('node:crypto');
 
 test('cached preparation never repeats Python imports or media probes; changed files invalidate probes', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'foa-probe-test-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'pano-player-probe-test-'));
   const calls = [];
   const probe = { streams: [{ index: 0, codec_type: 'video', width: 100, height: 50 },
     { index: 1, codec_type: 'audio', channels: 4, sample_rate: '48000' }], format: { duration: '10' } };

@@ -2,7 +2,7 @@
   const frame = document.getElementById('active-frame');
   const w = frame.contentWindow; const d = w.document;
   const v = d.getElementById('video'); const canvas = d.getElementById('overlay');
-  const state = () => w.__FOA_POWERMAP__.getState();
+  const state = () => w.__PANO_PLAYER__.getState();
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const assert = (ok, message) => { if (!ok) throw new Error(message); };
   const wait = async predicate => {

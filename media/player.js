@@ -5,26 +5,44 @@
   const $ = id => document.getElementById(id);
   const video = new window.StreamPlayer($('video'), api); const canvas = $('overlay');
   const ctx = canvas.getContext('2d');
-  const saved = api.getState() || {};
+  const defaults = JSON.parse(video.dataset.defaults);
+  let preferences = JSON.parse(video.dataset.preferences);
   const stats = { received: 0, discarded: 0, computeMs: 0, firstFrameMs: null, canPlayMs: null, stalls: 0 };
   const monitor = new window.FoaMonitor(video, processingError, acceptMap);
   let view; let viewMode = 'flat'; let viewLoading;
   let projector; let projectionLoading; let projectionRequest = 0;
   let ready = false; let mappedAt = null; let lastMap; let processingIssue = false;
   let hasVideo = true; let sourceAspect = 2; let mediaDetail = 'Native media';
-  $('listening').value = 'binaural'; $('order').value = 'WYZX'; $('projection').value = '360';
-  $('normalization').value = 'SN3D'; $('layout').value = 'mono';
   $('projection').disabled = $('layout').disabled = true;
-  $('enabled').checked = saved.enabled !== false; $('opacity').value = saved.opacity ?? .75;
   function level(id) { $(id + '-value').textContent = Math.round(Number($(id).value) * 100) + '%'; }
-  level('opacity');
-  monitor.setVolume(.7); monitor.enabled = $('enabled').checked;
   function icons() { lucide.createIcons(); }
   function icon(button, name, label) { button.innerHTML = '<i data-lucide="' + name + '" aria-hidden="true"></i>'; button.setAttribute('aria-label', label); button.setAttribute('title', label); icons(); }
   function diagnostic(text) { api.postMessage({ type: 'diagnostic', text }); }
   function clear() { ctx.clearRect(0, 0, 140, 70); mappedAt = null; view?.mapChanged(); }
   function reset() { monitor.reset(); lastMap = null; clear(); }
-  function persist() { api.setState({ enabled: $('enabled').checked, opacity: Number($('opacity').value) }); }
+  function persist(patch) {
+    preferences = { ...preferences, ...patch };
+    api.setState(preferences);
+    api.postMessage({ type: 'preferences', patch });
+  }
+  function eyeAspect() { return sourceAspect * ($('layout').value === 'sbs' ? .5 : $('layout').value === 'tb' ? 2 : 1); }
+  function effectiveProjection() {
+    return $('projection').value === 'auto' ? (hasVideo && eyeAspect() >= .9 && eyeAspect() <= 1.1 ? '180' : '360') : $('projection').value;
+  }
+  function applyPreferences() {
+    for (const id of ['projection', 'layout', 'listening', 'order', 'normalization', 'opacity', 'volume']) $(id).value = preferences[id];
+    $('enabled').checked = preferences.enabled;
+    monitor.setMode(preferences.listening); monitor.setOrder(preferences.order);
+    monitor.setNormalization(preferences.normalization); monitor.setEnabled(preferences.enabled);
+    lastMap = null; clear();
+    monitor.setVolume(preferences.volume); monitor.setMuted(preferences.muted);
+    icon($('mute'), preferences.muted ? 'volume-x' : 'volume-2', preferences.muted ? 'Unmute' : 'Mute');
+    level('opacity'); level('volume');
+    view?.restore(preferences);
+    void selectView(preferences.view);
+    if (video.readyState >= 1) metadata(); else void selectProjection();
+    draw();
+  }
   function layoutProjection() {
     const spatial = viewMode === 'spatial';
     for (const mode of ['flat', 'spatial']) {
@@ -33,16 +51,16 @@
     }
     $('stage').setAttribute('role', 'tabpanel');
     $('stage').setAttribute('aria-labelledby', 'view-' + viewMode);
-    const halfSphere = hasVideo && $('projection').value === '180';
+    const projection = effectiveProjection();
+    const halfSphere = hasVideo && projection === '180';
     const style = $('stage').style;
-    const eyeAspect = sourceAspect * ($('layout').value === 'sbs' ? .5 : $('layout').value === 'tb' ? 2 : 1);
-    style.setProperty('--video-aspect', String(spatial ? 16 / 9 : hasVideo ? $('projection').value === 'eac' ? 2 : eyeAspect * (halfSphere ? 2 : 1) : 2));
+    style.setProperty('--video-aspect', String(spatial ? 16 / 9 : hasVideo ? projection === 'eac' ? 2 : eyeAspect() * (halfSphere ? 2 : 1) : 2));
     style.setProperty('--video-left', halfSphere ? '25%' : '0%');
     style.setProperty('--video-width', halfSphere ? '50%' : '100%');
     video.hidden = !hasVideo || spatial || !!video.displayElement; canvas.hidden = spatial;
     $('projected').hidden = !hasVideo || spatial || !video.displayElement;
     $('reset-view').disabled = !spatial;
-    view?.configure(spatial, hasVideo, $('projection').value);
+    view?.configure(spatial, hasVideo, projection);
   }
   function renderProjection() {
     if (video.displayElement && projector?.render(video.frames)) view?.sourceChanged();
@@ -50,14 +68,14 @@
   async function selectProjection() {
     const request = ++projectionRequest;
     try {
-      const transformed = $('projection').value === 'eac' || $('layout').value !== 'mono';
+      const transformed = hasVideo && (effectiveProjection() === 'eac' || $('layout').value !== 'mono');
       if (transformed && !projector) {
         if (!window.PanoProjection) await (projectionLoading ||= import(new URL('projection.js', video.dataset.view).href));
         if (request !== projectionRequest) return;
         projector = new window.PanoProjection($('projected'), video.element);
       }
       video.displayElement = transformed ? $('projected') : undefined;
-      if (transformed) { projector.configure($('projection').value, $('layout').value); projector.render(video.frames); }
+      if (transformed) { projector.configure(effectiveProjection(), $('layout').value); projector.render(video.frames); }
       layoutProjection();
     } catch (error) {
       if (request !== projectionRequest) return;
@@ -122,16 +140,18 @@
     if (bypass) {
       $('listening').value = 'bypass'; $('enabled').checked = false;
       monitor.enabled = false; clear(); lastMap = null; $('metrics').textContent = 'Bypass';
+    } else {
+      $('listening').value = preferences.listening; $('enabled').checked = preferences.enabled;
+      monitor.enabled = preferences.enabled;
     }
     hasVideo = video.videoWidth > 0 && video.videoHeight > 0;
     $('audio-poster').hidden = hasVideo || !bypass;
     $('audio-format').textContent = video.channels === 1 ? 'Mono audio' : 'Stereo audio';
     sourceAspect = hasVideo ? video.videoWidth / video.videoHeight : 2;
     $('projection').disabled = $('layout').disabled = !hasVideo;
-    $('projection').value = hasVideo && sourceAspect >= .9 && sourceAspect <= 1.1 ? '180' : '360';
     mediaDetail = hasVideo ? video.videoWidth + ' × ' + video.videoHeight + ' streaming preview' : bypass ? 'Audio' : 'Audio · PowerMap';
     $('detail').textContent = mediaDetail + (bypass ? ' · ' + video.channels + 'ch · Bypass' : ' · initializing spatial audio');
-    layoutProjection(); transport();
+    void selectProjection(); transport();
   }
   function firstFrame() {
     renderProjection(); if (!video.displayElement) view?.sourceChanged();
@@ -176,16 +196,17 @@
     }
   });
   $('seek').addEventListener('input', () => { video.currentTime = Number($('seek').value); });
-  $('volume').addEventListener('input', () => { monitor.setVolume(Number($('volume').value)); level('volume'); });
+  $('volume').addEventListener('input', () => { monitor.setVolume(Number($('volume').value)); level('volume'); persist({ volume: Number($('volume').value) }); });
   $('mute').addEventListener('click', () => {
     monitor.setMuted(!monitor.muted);
     icon($('mute'), monitor.muted ? 'volume-x' : 'volume-2', monitor.muted ? 'Unmute' : 'Mute');
+    persist({ muted: monitor.muted });
   });
-  $('listening').addEventListener('change', () => monitor.setMode($('listening').value));
-  $('enabled').addEventListener('change', () => { monitor.setEnabled($('enabled').checked); lastMap = null; clear(); persist(); });
-  $('opacity').addEventListener('input', () => { level('opacity'); persist(); draw(); });
-  $('projection').addEventListener('change', () => { void selectProjection(); });
-  $('layout').addEventListener('change', () => { void selectProjection(); });
+  $('listening').addEventListener('change', () => { monitor.setMode($('listening').value); persist({ listening: $('listening').value }); });
+  $('enabled').addEventListener('change', () => { monitor.setEnabled($('enabled').checked); lastMap = null; clear(); persist({ enabled: $('enabled').checked }); });
+  $('opacity').addEventListener('input', () => { level('opacity'); persist({ opacity: Number($('opacity').value) }); draw(); });
+  $('projection').addEventListener('change', () => { persist({ projection: $('projection').value }); void selectProjection(); });
+  $('layout').addEventListener('change', () => { persist({ layout: $('layout').value }); void selectProjection(); });
   async function selectView(mode) {
     viewMode = mode;
     try {
@@ -193,6 +214,8 @@
         if (!window.FoaView) await (viewLoading ||= import(video.dataset.view));
         if (viewMode !== 'spatial') return;
         view = new window.FoaView($('spatial'), video, canvas, monitor);
+        view.restore(preferences);
+        view.onChange = camera => persist(camera);
       }
       layoutProjection();
     } catch (error) {
@@ -201,18 +224,20 @@
     }
   }
   for (const mode of ['flat', 'spatial']) {
-    $('view-' + mode).addEventListener('click', () => { void selectView(mode); });
+    $('view-' + mode).addEventListener('click', () => { persist({ view: mode }); void selectView(mode); });
     $('view-' + mode).addEventListener('keydown', event => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
       const next = event.key === 'Home' ? 'flat' : event.key === 'End' ? 'spatial' : mode === 'flat' ? 'spatial' : 'flat';
-      void selectView(next); $('view-' + next).focus();
+      persist({ view: next }); void selectView(next); $('view-' + next).focus();
     });
   }
   $('reset-view').addEventListener('click', () => view?.reset());
-  $('order').addEventListener('change', () => { monitor.setOrder($('order').value); lastMap = null; clear(); });
+  $('reset-settings').addEventListener('click', () => { persist({ ...defaults }); applyPreferences(); });
+  $('order').addEventListener('change', () => { monitor.setOrder($('order').value); lastMap = null; clear(); persist({ order: $('order').value }); });
   $('normalization').addEventListener('change', () => {
     monitor.setNormalization($('normalization').value); lastMap = null; clear(); updateClock();
+    persist({ normalization: $('normalization').value });
   });
   $('retry').addEventListener('click', () => location.reload());
   $('fullscreen').addEventListener('click', async () => {
@@ -221,13 +246,12 @@
   });
   window.addEventListener('message', ({ data }) => { if (data?.type === 'suspend') video.pause(); });
   window.addEventListener('pagehide', () => { projectionRequest++; projector?.dispose(); view?.dispose(); monitor.dispose(); });
-  window.__FOA_POWERMAP__ = { monitor, get view() { return view; }, getState: () => ({
+  window.__PANO_PLAYER__ = { monitor, get view() { return view; }, getState: () => ({
     ...stats, ready, generation: monitor.generation, currentTime: video.currentTime, paused: video.paused, mappedAt,
-    projection: hasVideo ? $('projection').value : 'audio', layout: $('layout').value, listening: monitor.getState(), view: view?.getState(),
+    projection: hasVideo ? effectiveProjection() : 'audio', projectionMode: $('projection').value, preferences: { ...preferences }, layout: $('layout').value, listening: monitor.getState(), view: view?.getState(),
     videoQuality: (() => { const q = video.getVideoPlaybackQuality?.(); return q && { total: q.totalVideoFrames, dropped: q.droppedVideoFrames }; })(),
   }) };
-  icons(); layoutProjection(); requestAnimationFrame(tick);
-  if (video.readyState >= 1) metadata();
+  applyPreferences(); icons(); layoutProjection(); requestAnimationFrame(tick);
   if (video.readyState >= 2) firstFrame();
   if (video.readyState >= 3) canPlay();
   if (video.error) mediaError();
