@@ -53,7 +53,7 @@ async function main() {
       const samplePage = await sampleContext.newPage();
       await samplePage.goto(origin + route);
       await samplePage.waitForFunction(() => document.querySelector('video').readyState >= 3);
-      const timing = await samplePage.evaluate(() => window.__FOA_POWERMAP__?.getState().canPlayMs ?? window.nativeReady);
+      const timing = await samplePage.evaluate(() => window.__PANO_PLAYER__?.getState().canPlayMs ?? window.nativeReady);
       startupSamples.push({ route, canPlayMs: timing });
       await sampleContext.close();
     }
@@ -64,14 +64,14 @@ async function main() {
     await page.goto(`${origin}/native`);
     await page.waitForFunction(() => document.querySelector('video').readyState >= 3);
     const native = await page.evaluate(() => ({ firstFrameMs: window.nativeFrame, canPlayMs: window.nativeReady, width: document.querySelector('video').videoWidth }));
-    if (process.env.FOA_PLAYBACK_MS) {
+    if (process.env.PANO_PLAYER_PLAYBACK_MS) {
       await page.locator('video').evaluate(video => video.play());
-      await page.waitForTimeout(Number(process.env.FOA_PLAYBACK_MS) + 3000);
+      await page.waitForTimeout(Number(process.env.PANO_PLAYER_PLAYBACK_MS) + 3000);
       native.playback = await page.locator('video').evaluate(video => {
         const q = video.getVideoPlaybackQuality();
         return { time: video.currentTime, paused: video.paused, total: q.totalVideoFrames, dropped: q.droppedVideoFrames };
       });
-      assert.ok(native.playback.time >= Number(process.env.FOA_PLAYBACK_MS) / 1000, 'Native baseline was interrupted');
+      assert.ok(native.playback.time >= Number(process.env.PANO_PLAYER_PLAYBACK_MS) / 1000, 'Native baseline was interrupted');
     }
     await page.goto(origin);
     await page.evaluate(() => {
@@ -80,22 +80,22 @@ async function main() {
       for (const event of ['play', 'playing', 'pause', 'ended', 'waiting', 'error']) video.addEventListener(event,
         () => window.mediaEvents.push({ event, time: video.currentTime, at: performance.now(), duration: video.duration, ended: video.ended }));
     });
-    await page.waitForFunction(() => window.__FOA_POWERMAP__?.getState().ready);
-    const startup = await page.evaluate(() => window.__FOA_POWERMAP__.getState());
+    await page.waitForFunction(() => window.__PANO_PLAYER__?.getState().ready);
+    const startup = await page.evaluate(() => window.__PANO_PLAYER__.getState());
     await page.locator('#play').click();
     await page.waitForFunction(() => document.querySelector('video').currentTime > 3);
-    await page.waitForTimeout(Number(process.env.FOA_PLAYBACK_MS || 8000));
-    const playing = await page.evaluate(() => window.__FOA_POWERMAP__.getState());
+    await page.waitForTimeout(Number(process.env.PANO_PLAYER_PLAYBACK_MS || 8000));
+    const playing = await page.evaluate(() => window.__PANO_PLAYER__.getState());
     await page.locator('#view-spatial').click();
-    await page.waitForFunction(() => window.__FOA_POWERMAP__.view?.active);
-    const viewBefore = await page.evaluate(() => window.__FOA_POWERMAP__.view.getState());
+    await page.waitForFunction(() => window.__PANO_PLAYER__.view?.active);
+    const viewBefore = await page.evaluate(() => window.__PANO_PLAYER__.view.getState());
     const box = await page.locator('#spatial').boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2 + 100, box.y + box.height / 2 + 20, { steps: 5 });
     await page.mouse.up();
     const spatial = await page.evaluate(() => {
-      const view = window.__FOA_POWERMAP__.view;
+      const view = window.__PANO_PLAYER__.view;
       view.render();
       const gl = view.gpu.getContext(), pixels = new Uint8Array(64 * 64 * 4);
       gl.readPixels(0, 0, 64, 64, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
@@ -111,7 +111,7 @@ async function main() {
     assert.equal(playing.listening.channels, 4);
     assert.ok(playing.received > 5, 'Expected live PowerMap updates');
     assert.ok(playing.currentTime > 3);
-    if (process.env.FOA_PLAYBACK_MS) assert.ok(playing.currentTime >= Number(process.env.FOA_PLAYBACK_MS) / 1000,
+    if (process.env.PANO_PLAYER_PLAYBACK_MS) assert.ok(playing.currentTime >= Number(process.env.PANO_PLAYER_PLAYBACK_MS) / 1000,
       'Sustained playback must advance for the requested duration');
     assert.notEqual(spatial.yaw, viewBefore.yaw);
     if (native.width) assert.ok(spatial.nonzero > 64, 'Spatial video canvas must not be blank');

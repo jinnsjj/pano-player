@@ -6,10 +6,10 @@ const os = require('node:os');
 const { build } = require('esbuild');
 
 test('bundled decoder preserves original mono, stereo and FOA PCM', async t => {
-  const files = process.env.FOA_CODEC_FILES?.split('|');
-  if (!files) { t.skip('Set FOA_CODEC_FILES to original MP4 and WebM paths.'); return; }
+  const files = process.env.PANO_PLAYER_CODEC_FILES?.split('|');
+  if (!files) { t.skip('Set PANO_PLAYER_CODEC_FILES to original MP4 and WebM paths.'); return; }
   const root = path.resolve(__dirname, '..');
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'foa-codecs-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pano-player-codecs-'));
   try {
     const output = path.join(dir, 'decode.cjs');
     await build({ stdin: { contents: `export * from '${root}/src/stream-codecs.js'; export * from 'mediabunny';`,
@@ -48,9 +48,9 @@ test('bundled decoder preserves original mono, stereo and FOA PCM', async t => {
         }
         assert.ok(frames > config.sampleRate);
         const decodeMs = performance.now() - start;
-        if (process.env.FOA_FFMPEG) {
+        if (process.env.PANO_PLAYER_FFMPEG) {
           const { execFileSync } = require('node:child_process');
-          const reference = execFileSync(process.env.FOA_FFMPEG,
+          const reference = execFileSync(process.env.PANO_PLAYER_FFMPEG,
             ['-v', 'error', '-i', file, '-t', '2.1', '-map', '0:a:0', '-f', 'f32le', '-'], { maxBuffer: 8 * 1024 * 1024 });
           assert.ok(reference.length >= frames * channels * 4);
           for (let ch = 0; ch < channels; ch++) {
@@ -64,10 +64,10 @@ test('bundled decoder preserves original mono, stereo and FOA PCM', async t => {
         }
         console.log(JSON.stringify({ file, channels, frames, decodeMs, bytes, size,
           rms: planes.map(plane => Math.sqrt(plane.reduce((sum, value) => sum + value * value, 0) / plane.length)) }));
-        if (process.env.FOA_PCM_DIR) {
+        if (process.env.PANO_PLAYER_PCM_DIR) {
           const pcm = new Float32Array(frames * channels);
           for (let i = 0; i < frames; i++) for (let ch = 0; ch < channels; ch++) pcm[i * channels + ch] = planes[ch][i];
-          await fs.writeFile(path.join(process.env.FOA_PCM_DIR, path.basename(file) + '.f32'), Buffer.from(pcm.buffer));
+          await fs.writeFile(path.join(process.env.PANO_PLAYER_PCM_DIR, path.basename(file) + '.f32'), Buffer.from(pcm.buffer));
         }
       } finally { input.dispose(); await handle.close(); }
     }

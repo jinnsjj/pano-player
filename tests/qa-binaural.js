@@ -1,6 +1,6 @@
 (async () => {
   const w = document.getElementById('active-frame').contentWindow;
-  const d = w.document; const player = w.__FOA_POWERMAP__; const monitor = player.monitor;
+  const d = w.document; const player = w.__PANO_PLAYER__; const monitor = player.monitor;
   const assert = (ok, message) => { if (!ok) throw new Error(message); };
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const render = async sign => {

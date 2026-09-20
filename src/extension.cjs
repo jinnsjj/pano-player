@@ -4,9 +4,11 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const { renderHtml } = require('./webview.cjs');
 const { hostFile } = require('./host-file.cjs');
+const { normalize } = require('./preferences.cjs');
 
 function activate(context) {
   const log = vscode.window.createOutputChannel('PanoPlayer');
+  let preferences = normalize(context.globalState.get('playerPreferences'));
   const provider = {
     openCustomDocument(uri) {
       if (uri.scheme !== 'file' && !(uri.scheme === 'vscode-remote' && vscode.env.remoteName)) {
@@ -26,7 +28,7 @@ function activate(context) {
       const source = document.uri.query ? original : original.with({ query: `version=${Date.now()}` });
       panel.webview.html = renderHtml({
         title: path.basename(document.uri.fsPath), cspSource: panel.webview.cspSource,
-        nonce: randomBytes(24).toString('hex'), source: source.toString(), hostMedia: true,
+        nonce: randomBytes(24).toString('hex'), source: source.toString(), hostMedia: true, preferences,
         script: asset('player.js'), style: asset('player.css'), omnitone: asset('omnitone.min.js'),
         monitor: asset('monitor.js'), view: asset('view.js'), icons: asset('lucide.min.js'),
         worker: asset('powermap-worker.js'), worklet: asset('foa-capture-processor.js'),
@@ -34,6 +36,13 @@ function activate(context) {
       });
       const media = hostFile(document.uri.fsPath, message => panel.webview.postMessage(message));
       const receive = panel.webview.onDidReceiveMessage(message => {
+        if (message?.type === 'preferences' && message.patch && typeof message.patch === 'object') {
+          preferences = normalize({ ...preferences, ...message.patch });
+          void context.globalState.update('playerPreferences', preferences).then(undefined, error => {
+            log.appendLine('Cannot save preferences: ' + error.message);
+          });
+          return;
+        }
         if (message?.type === 'read-media') { void media.read(message); return; }
         if (message?.type === 'diagnostic' && typeof message.text === 'string') {
           log.appendLine(path.basename(document.uri.fsPath) + ': ' + message.text.slice(0, 2000));
@@ -46,19 +55,13 @@ function activate(context) {
     },
   };
   context.subscriptions.push(log,
-    vscode.window.registerCustomEditorProvider('foaPowermap.player', provider, {
+    vscode.window.registerCustomEditorProvider('panoPlayer.player', provider, {
       supportsMultipleEditorsPerDocument: false, webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.commands.registerCommand('panoPlayer.open', async uri => {
       const selected = uri || (await vscode.window.showOpenDialog({ canSelectMany: false,
         filters: { 'Panorama media': ['mp4', 'webm', 'wav', 'mov', 'mkv'] } }))?.[0];
-      if (selected) await vscode.commands.executeCommand('vscode.openWith', selected, 'foaPowermap.player');
-    }),
-    // Explicit cleanup for old releases; never part of preview startup.
-    vscode.commands.registerCommand('panoPlayer.clearCache', async () => {
-      const cache = vscode.Uri.joinPath(context.globalStorageUri, '..', 'spatial-audio-tools.foa-powermap-player', 'playback-v1');
-      await require('node:fs/promises').rm(cache.fsPath, { recursive: true, force: true });
-      void vscode.window.showInformationMessage('Legacy FOA PowerMap playback cache cleared. Native preview does not create media proxies.');
+      if (selected) await vscode.commands.executeCommand('vscode.openWith', selected, 'panoPlayer.player');
     }));
 }
 module.exports = { activate };

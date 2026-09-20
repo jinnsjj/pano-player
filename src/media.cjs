@@ -23,7 +23,7 @@ function runProcess(executable, args, { signal, onOutput } = {}) {
     });
     child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-8000); });
     const cleanup = () => { clearTimeout(killTimer); signal?.removeEventListener('abort', abort); };
-    child.on('error', error => { cleanup(); reject(new Error(`${executable}: ${error.message}. Check FOA PowerMap executable settings.`)); });
+    child.on('error', error => { cleanup(); reject(new Error(`${executable}: ${error.message}. Check the reference runner executable path.`)); });
     child.on('close', code => {
       cleanup();
       if (signal?.aborted) reject(new Error('Operation cancelled.'));

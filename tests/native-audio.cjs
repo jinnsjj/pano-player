@@ -21,9 +21,9 @@ exports.checkAudio = async (browser, origin) => {
   try {
     await page.goto(`${origin}/?direction=left`);
     await page.locator('#play').click();
-    await page.waitForFunction(() => window.__FOA_POWERMAP__?.monitor.ready);
+    await page.waitForFunction(() => window.__PANO_PLAYER__?.monitor.ready);
     await page.evaluate(() => {
-      const m = window.__FOA_POWERMAP__.monitor;
+      const m = window.__PANO_PLAYER__.monitor;
       const split = m.context.createChannelSplitter(2);
       // Observe the real post-gain playback mix, not a separate test renderer.
       for (const node of [m.output, m.stereo, m.fallback]) node.connect(split);
@@ -42,7 +42,7 @@ exports.checkAudio = async (browser, origin) => {
     const front = await energy();
     assert.ok(front[0] > front[1] * 2 && front[1] > 1e-8, `Left source must favor L: ${front}`);
     await page.locator('#view-spatial').click();
-    await page.waitForFunction(() => window.__FOA_POWERMAP__.view?.active);
+    await page.waitForFunction(() => window.__PANO_PLAYER__.view?.active);
     await page.locator('#spatial').focus();
     for (let i = 0; i < 31; i++) await page.keyboard.press('ArrowLeft');
     const rotated = await energy();
@@ -57,6 +57,6 @@ exports.checkAudio = async (browser, origin) => {
     await page.locator('#listening').selectOption('stereo');
     const stereo = await energy();
     assert.ok(stereo[0] > stereo[1] * 7, `Stereo monitor must preserve left direction: ${stereo}`);
-    return { front, rotated, reset, muted, stereo, state: await page.evaluate(() => window.__FOA_POWERMAP__.getState()) };
+    return { front, rotated, reset, muted, stereo, state: await page.evaluate(() => window.__PANO_PLAYER__.getState()) };
   } finally { await page.close(); }
 };

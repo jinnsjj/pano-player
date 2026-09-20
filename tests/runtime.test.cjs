@@ -16,7 +16,7 @@ test('explicit overrides fail rather than silently using a different executable'
   const calls = [];
   await assert.rejects(resolveRuntime({ ffmpegPath: '/custom/ffmpeg' }, { ...options, run: async exe => {
     calls.push(exe); throw new Error('ENOENT');
-  } }), /foaPowermap.ffmpegPath.*ENOENT/);
+  } }), /Invalid ffmpegPath.*ENOENT/);
   assert.deepEqual(calls, ['/custom/ffmpeg']);
 });
 test('finds ffprobe beside a custom ffmpeg', async () => {

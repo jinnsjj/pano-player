@@ -1,4 +1,6 @@
-# FOA PowerMap Skill
+# Third-Party Notices
+
+## PowerMap Analyzer
 
 `python/foa_music_powermap.py` is an unchanged copy of the locally installed
 `generate-foa-powermap/scripts/foa_music_powermap.py` as of 2026-09-10. Its source

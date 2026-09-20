@@ -74,15 +74,19 @@ class FoaView {
     this.orient(this.yaw, this.pitch);
   }
   orient(yaw, pitch) {
+    const previousYaw = this.yaw, previousPitch = this.pitch;
     this.yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
     this.pitch = Math.max(-Math.PI / 2 + .05, Math.min(Math.PI / 2 - .05, pitch));
     this.camera.rotation.set(this.active ? this.pitch : 0, this.active ? this.yaw : 0, 0, 'YXZ');
     this.camera.updateMatrixWorld(true);
     this.monitor.setOrientation(this.camera.matrixWorld);
     this.render();
+    if (Math.abs(this.yaw - previousYaw) > 1e-10 || Math.abs(this.pitch - previousPitch) > 1e-10) this.changed();
   }
-  zoom(fov) { this.camera.fov = Math.max(35, Math.min(110, fov)); this.render(); }
-  reset() { this.camera.fov = 72; this.orient(0, 0); }
+  changed() { this.onChange?.({ yaw: this.yaw, pitch: this.pitch, fov: this.camera.fov }); }
+  zoom(fov) { this.camera.fov = Math.max(35, Math.min(110, fov)); this.render(); this.changed(); }
+  restore({ yaw, pitch, fov }) { this.camera.fov = fov; this.orient(yaw, pitch); }
+  reset() { this.camera.fov = 72; this.orient(0, 0); this.changed(); }
   mapChanged() { this.mapTexture.needsUpdate = true; this.render(); }
   sourceChanged() { this.videoTexture.needsUpdate = true; if (this.video.paused) this.render(); }
   render() {

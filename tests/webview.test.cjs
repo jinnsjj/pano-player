@@ -34,12 +34,16 @@ test('review UI keeps direct view tabs, labeled setting groups and accessible tr
   assert.doesNotMatch(html, />Spatial<\/button>/);
   assert.match(html, /<fieldset class="map-settings"><legend>/);
   assert.match(html, /<fieldset class="audio-settings"><legend>/);
+  assert.match(html, /<option value="auto">Auto<\/option>/);
+  assert.match(html, /id="reset-settings"[^>]*aria-label="Restore default settings"/);
   assert.match(html, /aria-label="Overlay opacity"/);
   for (const id of ['volume-value', 'opacity-value']) assert.match(html, new RegExp('id="' + id + '" aria-hidden="true"'));
 });
 test('header leaves filenames to the editor tab and MUSIC parameters belong to PowerMap', () => {
   const html = renderHtml({ title: 'review.webm' });
   const header = html.match(/<header>[\s\S]*?<\/header>/)[0];
+  assert.match(header, /data-lucide="scan"/);
+  assert.match(header, /<strong>PanoPlayer<\/strong>/);
   assert.doesNotMatch(header, /review\.webm|music-badge/);
   assert.doesNotMatch(html, /id="filename"/);
   const mapSettings = html.match(/<fieldset class="map-settings">[\s\S]*?<\/fieldset>/)[0];
@@ -58,7 +62,7 @@ test('WAV is registered in the editor selector and open command', () => {
   assert.equal(icon.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
   assert.equal(manifest.contributes.commands[0].title, 'PanoPlayer: Open Media');
   assert.equal(manifest.contributes.customEditors[0].displayName, 'PanoPlayer');
-  assert.match(renderHtml({ title: 'review.webm' }), /<strong>PanoPlayer<\/strong>/);
+  assert.match(renderHtml({ title: 'review.webm' }), /<title>review.webm - PanoPlayer<\/title>/);
 });
 test('MOV and MKV are offered by the editor, context menu and file picker', () => {
   const extension = require('node:fs').readFileSync(require.resolve('../src/extension.cjs'), 'utf8');
@@ -75,7 +79,11 @@ test('feature overview packages with GitHub HTTPS image rewriting', () => {
   const path = require('node:path');
   const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   const source = read('README.md');
-  assert.match(source, /^# PanoPlayer\n/);
+  assert.match(source, /^# PanoPlayer$/m);
+  assert.match(source, /<img src="media\/icon\.png" width="128" height="128" alt="PanoPlayer logo">/);
+  for (const badge of ['badgen.net/vs-marketplace/v/shijunjie.pano-player', 'badgen.net/vs-marketplace/i/shijunjie.pano-player', 'img.shields.io/github/license/jinnsjj/pano-player', 'img.shields.io/badge/VS%20Code-1.84%2B']) {
+    assert.ok(source.includes('https://' + badge));
+  }
   assert.match(source, /## Explore The Scene/);
   assert.doesNotMatch(source, /\p{Script=Han}/u);
   assert.doesNotMatch(source, /data:image\//);

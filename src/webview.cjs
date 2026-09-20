@@ -1,6 +1,7 @@
 'use strict';
 const escape = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-function renderHtml({ title, cspSource, script, style, icons, omnitone, monitor, view, nonce, source, worker, worklet, decoder, pcm, stream, hostMedia = false }) {
+const { defaults, normalize } = require('./preferences.cjs');
+function renderHtml({ title, cspSource, script, style, icons, omnitone, monitor, view, nonce, source, worker, worklet, decoder, pcm, stream, hostMedia = false, preferences }) {
   return `<!doctype html><html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} data:; media-src ${cspSource}; connect-src ${cspSource}; worker-src blob:; style-src ${cspSource}; script-src ${cspSource} blob: 'wasm-unsafe-eval' 'nonce-${nonce}';">
@@ -12,7 +13,7 @@ function renderHtml({ title, cspSource, script, style, icons, omnitone, monitor,
 <main>
   <div class="viewport">
     <div id="stage">
-      <canvas id="video" data-host="${hostMedia ? '1' : '0'}" data-source="${escape(source || '')}" data-decoder="${escape(decoder || '')}" data-pcm="${escape(pcm || '')}" data-worker="${escape(worker || '')}" data-worklet="${escape(worklet || '')}" data-view="${escape(view || '')}" aria-label="Panorama video"></canvas>
+      <canvas id="video" data-defaults="${escape(JSON.stringify(defaults))}" data-preferences="${escape(JSON.stringify(normalize(preferences)))}" data-host="${hostMedia ? '1' : '0'}" data-source="${escape(source || '')}" data-decoder="${escape(decoder || '')}" data-pcm="${escape(pcm || '')}" data-worker="${escape(worker || '')}" data-worklet="${escape(worklet || '')}" data-view="${escape(view || '')}" aria-label="Panorama video"></canvas>
       <canvas id="projected" aria-label="Single-eye panorama" hidden></canvas>
       <canvas id="overlay" width="140" height="70" aria-label="FOA direction heatmap"></canvas>
       <div id="audio-poster" hidden><i data-lucide="audio-lines" aria-hidden="true"></i><span id="audio-format"></span></div>
@@ -29,7 +30,7 @@ function renderHtml({ title, cspSource, script, style, icons, omnitone, monitor,
   </div>
   <div id="options" role="group" aria-label="Media settings">
     <div id="projection-options" role="group" aria-label="Video settings">
-      <label>Projection <select id="projection" aria-label="Video projection"><option value="360">360° ERP</option><option value="180">180° ERP</option><option value="eac">EAC (3×2)</option></select></label>
+      <label>Projection <select id="projection" aria-label="Video projection"><option value="auto">Auto</option><option value="360">360° ERP</option><option value="180">180° ERP</option><option value="eac">EAC (3×2)</option></select></label>
       <label>Layout <select id="layout" aria-label="Stereo layout"><option value="mono">Mono</option><option value="sbs">Stereo SBS · Left</option><option value="tb">Stereo TB · Top</option></select></label>
       <div id="view-options">
         <div role="tablist" aria-label="View mode">
@@ -38,6 +39,7 @@ function renderHtml({ title, cspSource, script, style, icons, omnitone, monitor,
         </div>
         <button id="reset-view" title="Reset view" aria-label="Reset view" disabled><i data-lucide="rotate-ccw" aria-hidden="true"></i></button>
       </div>
+      <button id="reset-settings" title="Restore default settings" aria-label="Restore default settings"><i data-lucide="list-restart" aria-hidden="true"></i></button>
     </div>
     <fieldset class="map-settings"><legend><i data-lucide="radar" aria-hidden="true"></i>PowerMap</legend><div class="settings-row">
       <label class="toggle"><input id="enabled" type="checkbox" checked><span>Overlay</span></label>
