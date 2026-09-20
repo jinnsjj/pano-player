@@ -63,8 +63,9 @@ export class StreamPlayer extends EventTarget {
     } else if (data.type === 'video-end') { this.videoPending = false; this.videoEnded = true; }
   }
   async attach(context, destination) {
-    this.context = context;
     await this.metadata;
+    if (this.channels === 0) return;
+    this.context = context;
     const response = await fetch(this.dataset.pcm, { signal: this.abort.signal });
     if (!response.ok) throw new Error('Cannot load PCM audio worklet.');
     const url = URL.createObjectURL(new Blob([await response.text()], { type: 'text/javascript' }));
@@ -100,26 +101,51 @@ export class StreamPlayer extends EventTarget {
     if (!this.videoWidth || this.nextFrame || this.videoPending || this.videoEnded) return;
     this.videoPending = true; this.worker.postMessage({ type: 'video', epoch: this.epoch });
   }
+  advanceVideoClock() {
+    if (this.channels !== 0 || this.paused || this.clockStartedAt === undefined) return;
+    const now = performance.now();
+    this.time += (now - this.clockStartedAt) / 1000;
+    this.clockStartedAt = now;
+    if (Number.isFinite(this.duration)) this.time = Math.min(this.time, this.duration);
+    this.emit('timeupdate');
+  }
   render() {
+    this.advanceVideoClock();
     const frame = this.nextFrame;
     if (frame && (this.previewFrame || frame.time <= this.time + .025)) {
       this.previewFrame = false;
       this.element.getContext('2d').drawImage(frame.frame, 0, 0, this.element.width, this.element.height);
       frame.frame.close(); this.nextFrame = undefined; this.frames++;
+      if (this.channels === 0) {
+        this.videoEndTime = frame.time + frame.duration;
+        if (this.readyState < 3 || this.seeking) {
+          this.readyState = 3; this.seeking = false; this.emit('canplay'); this.emit('seeked');
+        }
+        if (!this.paused && this.clockStartedAt === undefined) this.clockStartedAt = performance.now();
+      }
       if (this.time - frame.time > .1) this.dropped++;
       this.emit('loadeddata'); this.requestVideo();
+    }
+    if (this.channels === 0 && this.videoEnded && !this.paused) {
+      const end = Number.isFinite(this.duration) ? this.duration : this.videoEndTime ?? this.time;
+      if (this.time >= end) {
+        this.pause(); this.time = this.duration = end; this.ended = true; this.seeking = false;
+        this.emit('ended');
+      }
     }
   }
   async play() {
     if (this.error) throw this.error;
     if (this.ended) await this.seek(0);
     this.paused = false; this.emit('play');
+    if (this.channels === 0 && !this.previewFrame) this.clockStartedAt = performance.now();
     await this.context?.resume();
     this.node?.port.postMessage({ type: 'play', epoch: this.epoch });
     this.emit('playing');
   }
   pause() {
     if (this.paused) return;
+    this.advanceVideoClock(); this.clockStartedAt = undefined;
     this.paused = true; this.node?.port.postMessage({ type: 'pause', epoch: this.epoch }); this.emit('pause');
   }
   async seek(value) {
@@ -130,6 +156,7 @@ export class StreamPlayer extends EventTarget {
     this.endFrame = this.time * this.sampleRate; this.audioPending = false;
     this.nextFrame?.frame.close(); this.nextFrame = undefined; this.videoPending = false; this.videoEnded = false;
     this.previewFrame = true;
+    this.clockStartedAt = undefined; this.videoEndTime = undefined;
     this.node?.port.postMessage({ type: 'seek', frame: Math.round(this.time * this.sampleRate), epoch: this.epoch });
     this.worker.postMessage({ type: 'seek', time: this.time, epoch: this.epoch });
     this.emit('seeking'); this.refill(); this.requestVideo();

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Remembered stereo layout regression</title>
+<style>body { font: 14px sans-serif; } canvas { width: 240px; display: block; }</style>
+<h1>Remembered stereo layout</h1><output id="result">Running</output><ul id="cases"></ul>
+<script type="module">
+import { PanoProjection } from '/projection.js';
+const failures = [];
+for (const layout of ['sbs', 'tb']) {
+  const source = document.createElement('canvas');
+  const output = document.createElement('canvas'); document.body.append(output);
+  const projector = new PanoProjection(output, source);
+  // Restored settings render before metadata sizes the source canvas.
+  projector.configure('360', layout); projector.render(0);
+  for (const width of [640, 320]) {
+    source.width = width; source.height = 320;
+    const draw = source.getContext('2d');
+    draw.fillStyle = '#00ff00'; draw.fillRect(0, 0, width, 320);
+    draw.fillStyle = '#ff0000'; draw.fillRect(0, 0, layout === 'sbs' ? width / 2 : width, layout === 'tb' ? 160 : 320);
+    projector.configure('360', layout); projector.render(width);
+    const copy = document.createElement('canvas'); copy.width = output.width; copy.height = output.height;
+    const context = copy.getContext('2d'); context.drawImage(output, 0, 0);
+    const pixel = context.getImageData(output.width / 2, output.height / 2, 1, 1).data;
+    const passed = pixel[0] > 240 && pixel[1] < 10 && pixel[2] < 10;
+    const label = layout + ' source width ' + width + ': ' + (passed ? 'PASS' : 'FAIL') + ' RGB ' + Array.from(pixel).slice(0, 3);
+    const item = document.createElement('li'); item.textContent = label; document.getElementById('cases').append(item);
+    if (!passed) failures.push(label);
+  }
+  projector.dispose();
+}
+document.getElementById('result').textContent = failures.length ? 'FAIL: ' + failures.length + ' black/wrong frames' : 'PASS: SBS and TB survive metadata resize and resolution changes';
+</script></html>

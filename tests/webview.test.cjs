@@ -25,30 +25,50 @@ test('review UI keeps direct view tabs, labeled setting groups and accessible tr
   assert.ok(html.indexOf('id="stage"') < html.indexOf('id="transport"'));
   assert.ok(html.indexOf('id="transport"') < html.indexOf('id="options"'));
   const settings = html.slice(html.indexOf('id="options"'), html.indexOf('<footer>'));
-  for (const id of ['projection-options', 'projection', 'layout', 'view-flat', 'view-spatial', 'reset-view', 'enabled', 'opacity', 'listening', 'order', 'normalization']) {
+  for (const id of ['projection-options', 'projection', 'layout', 'grid', 'gridOpacity', 'enabled', 'opacity', 'listening', 'order', 'normalization']) {
     assert.ok(settings.includes('id="' + id + '"'), id + ' belongs in the shared settings region');
   }
   assert.match(html, /role="group" aria-label="Playback controls"/);
-  assert.match(html, /id="view-spatial"[^>]*>.*>Perspective<\/button>/);
+  for (const [id, label, icon] of [['view-flat', 'Panorama', 'rectangle-horizontal'], ['view-spatial', 'Perspective', 'view']]) {
+    const tab = html.match(new RegExp(`<button id="${id}"[^>]*>.*?<\\/button>`))[0];
+    assert.ok(tab.includes(`title="${label}"`)); assert.ok(tab.includes(`aria-label="${label}"`));
+    assert.ok(tab.includes(`data-lucide="${icon}"`)); assert.match(tab, /<\/i><\/button>$/);
+  }
   assert.match(html, /aria-label="Perspective view;/);
   assert.doesNotMatch(html, />Spatial<\/button>/);
-  assert.match(html, /<fieldset class="map-settings"><legend>/);
-  assert.match(html, /<fieldset class="audio-settings"><legend>/);
+  const transport = html.slice(html.indexOf('id="transport"'), html.indexOf('id="options"'));
+  for (const id of ['view-flat', 'view-spatial', 'reset-view']) assert.ok(transport.includes('id="' + id + '"'));
+  assert.doesNotMatch(html, /id="fullscreen"/);
+  for (const group of ['projection', 'overlay', 'audio']) assert.match(settings, new RegExp(`id="${group}-heading">`));
+  for (const [group, icon] of [['projection', 'globe'], ['overlay', 'layers'], ['audio', 'audio-lines']]) {
+    assert.ok(settings.includes(`id="${group}-heading"><i data-lucide="${icon}" aria-hidden="true">`));
+  }
+  assert.match(settings, />Channel <select id="order"/);
   assert.match(html, /<option value="auto">Auto<\/option>/);
   assert.match(html, /id="reset-settings"[^>]*aria-label="Restore default settings"/);
-  assert.match(html, /aria-label="Overlay opacity"/);
-  for (const id of ['volume-value', 'opacity-value']) assert.match(html, new RegExp('id="' + id + '" aria-hidden="true"'));
+  for (const label of ['Grid opacity', 'PowerMap opacity']) assert.ok(html.includes('aria-label="' + label + '"'));
+  assert.equal((settings.match(/class="overlay-control"/g) || []).length, 2);
+  assert.equal((settings.match(/class="overlay-opacity"/g) || []).length, 2);
+  for (const id of ['volume-value', 'opacity-value', 'gridOpacity-value']) assert.match(html, new RegExp('id="' + id + '" aria-hidden="true"'));
 });
-test('header leaves filenames to the editor tab and MUSIC parameters belong to PowerMap', () => {
-  const html = renderHtml({ title: 'review.webm' });
+test('all webview icons are included in the selective Lucide registry', () => {
+  const source = require('node:fs').readFileSync(require.resolve('../src/icons.js'), 'utf8');
+  const registered = new Set(source.match(/icons: \{([^}]+)\}/)[1].split(',').map(name => name.trim()));
+  for (const [, name] of renderHtml({ title: 'icons.webm' }).matchAll(/data-lucide="([^"]+)"/g)) {
+    const exportName = name.replace(/(^|-)([a-z0-9])/g, (_, prefix, letter) => letter.toUpperCase());
+    assert.ok(registered.has(exportName), name + ' must be bundled');
+  }
+});
+test('header leaves filenames to the editor tab and metadata belongs to the footer', () => {
+  const html = renderHtml({ title: 'review.webm', logo: 'https://local/icon.png' });
   const header = html.match(/<header>[\s\S]*?<\/header>/)[0];
-  assert.match(header, /data-lucide="scan"/);
+  assert.match(header, /<img src="https:\/\/local\/icon.png" width="32" height="32"/);
+  assert.doesNotMatch(header, /data-lucide="scan"/);
   assert.match(header, /<strong>PanoPlayer<\/strong>/);
   assert.doesNotMatch(header, /review\.webm|music-badge/);
   assert.doesNotMatch(html, /id="filename"/);
-  const mapSettings = html.match(/<fieldset class="map-settings">[\s\S]*?<\/fieldset>/)[0];
-  assert.match(mapSettings, /id="music-badge"[^>]*>MUSIC · 1 source<\/span>/);
-  assert.ok(mapSettings.indexOf('id="music-badge"') > mapSettings.indexOf('id="opacity"'));
+  assert.doesNotMatch(html, /id="music-badge"|id="metrics"/);
+  assert.match(html, /<footer><span id="detail" role="status">/);
 });
 test('WAV is registered in the editor selector and open command', () => {
   assert.ok(manifest.contributes.customEditors[0].selector.some(s => s.filenamePattern === '*.wav'));

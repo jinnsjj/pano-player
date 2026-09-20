@@ -1,4 +1,5 @@
 /* global acquireVsCodeApi, lucide */
+import { drawDirectionGrid } from './direction-grid.js';
 (() => {
   'use strict';
   const api = acquireVsCodeApi();
@@ -20,6 +21,12 @@
   function diagnostic(text) { api.postMessage({ type: 'diagnostic', text }); }
   function clear() { ctx.clearRect(0, 0, 140, 70); mappedAt = null; view?.mapChanged(); }
   function reset() { monitor.reset(); lastMap = null; clear(); }
+  function updateGrid() {
+    const enabled = $('grid').checked;
+    drawDirectionGrid($('direction-grid'), enabled, Number($('gridOpacity').value));
+    $('direction-grid').hidden = !enabled || viewMode === 'spatial';
+    view?.setGridEnabled(enabled);
+  }
   function persist(patch) {
     preferences = { ...preferences, ...patch };
     api.setState(preferences);
@@ -30,14 +37,15 @@
     return $('projection').value === 'auto' ? (hasVideo && eyeAspect() >= .9 && eyeAspect() <= 1.1 ? '180' : '360') : $('projection').value;
   }
   function applyPreferences() {
-    for (const id of ['projection', 'layout', 'listening', 'order', 'normalization', 'opacity', 'volume']) $(id).value = preferences[id];
+    for (const id of ['projection', 'layout', 'listening', 'order', 'normalization', 'opacity', 'gridOpacity', 'volume']) $(id).value = preferences[id];
     $('enabled').checked = preferences.enabled;
+    $('grid').checked = preferences.grid; updateGrid();
     monitor.setMode(preferences.listening); monitor.setOrder(preferences.order);
     monitor.setNormalization(preferences.normalization); monitor.setEnabled(preferences.enabled);
     lastMap = null; clear();
     monitor.setVolume(preferences.volume); monitor.setMuted(preferences.muted);
     icon($('mute'), preferences.muted ? 'volume-x' : 'volume-2', preferences.muted ? 'Unmute' : 'Mute');
-    level('opacity'); level('volume');
+    level('opacity'); level('gridOpacity'); level('volume');
     view?.restore(preferences);
     void selectView(preferences.view);
     if (video.readyState >= 1) metadata(); else void selectProjection();
@@ -59,6 +67,7 @@
     style.setProperty('--video-width', halfSphere ? '50%' : '100%');
     video.hidden = !hasVideo || spatial || !!video.displayElement; canvas.hidden = spatial;
     $('projected').hidden = !hasVideo || spatial || !video.displayElement;
+    $('direction-grid').hidden = spatial || !$('grid').checked;
     $('reset-view').disabled = !spatial;
     view?.configure(spatial, hasVideo, projection);
   }
@@ -100,8 +109,7 @@
     if (data.rgba.length !== 140 * 70 * 4) return;
     processingIssue = false;
     mappedAt = data.time; lastMap = data.rgba; draw(); stats.received++; stats.computeMs = data.computeMs;
-    $('metrics').textContent = data.computeMs.toFixed(1) + ' ms DSP · 140 ms interval';
-    $('detail').textContent = mediaDetail + ' · 4ch ' + monitor.order + ' / ' + monitor.normalization + ' · ' + monitor.mode;
+    updateDetail();
   }
   function format(time) {
     const t = Math.max(0, Math.floor(Number.isFinite(time) ? time : 0));
@@ -115,10 +123,25 @@
   }
   function updateClock() {
     transport();
-    if (monitor.ready && !processingIssue) $('detail').textContent = mediaDetail + (monitor.bypass
-      ? ' · ' + video.channels + 'ch · Bypass'
-      : ' · 4ch ' + monitor.order + ' / ' + monitor.normalization + ' · ' + monitor.mode);
+    updateDetail();
     if (mappedAt !== null && Math.abs(video.currentTime - mappedAt) > .28) { clear(); lastMap = null; }
+  }
+  function updateDetail() {
+    if (processingIssue) return;
+    const items = [mediaDetail];
+    if (video.channels === 0) items.push('No audio');
+    else {
+      if (video.channels) items.push(video.channels + 'ch');
+      if (video.sampleRate > 0) items.push((video.sampleRate / 1000) + ' kHz');
+      if ([1, 2].includes(video.channels)) items.push('Bypass');
+      else {
+        items.push(monitor.order + ' / ' + monitor.normalization, monitor.ready ? monitor.mode : 'initializing spatial audio');
+        items.push('PowerMap' + ($('enabled').checked ? '' : ' off') + ': MUSIC', '1 source', '140 × 70', '140 ms interval');
+        if (stats.received && $('enabled').checked) items.push(stats.computeMs.toFixed(1) + ' ms DSP');
+      }
+    }
+    const text = items.join(' · ');
+    if ($('detail').textContent !== text) $('detail').textContent = text;
   }
   function tick() {
     video.render();
@@ -134,12 +157,14 @@
   }
   function metadata() {
     const bypass = [1, 2].includes(video.channels);
-    $('music-badge').hidden = bypass;
-    for (const id of ['enabled', 'opacity', 'order', 'normalization', 'listening']) $(id).disabled = bypass;
+    const noAudio = video.channels === 0;
+    for (const id of ['enabled', 'opacity', 'order', 'normalization', 'listening']) $(id).disabled = bypass || noAudio;
+    $('volume').disabled = $('mute').disabled = noAudio;
     $('bypass-option').hidden = !bypass;
-    if (bypass) {
-      $('listening').value = 'bypass'; $('enabled').checked = false;
-      monitor.enabled = false; clear(); lastMap = null; $('metrics').textContent = 'Bypass';
+    $('no-audio-option').hidden = !noAudio;
+    if (bypass || noAudio) {
+      $('listening').value = noAudio ? 'none' : 'bypass'; $('enabled').checked = false;
+      monitor.enabled = false; clear(); lastMap = null;
     } else {
       $('listening').value = preferences.listening; $('enabled').checked = preferences.enabled;
       monitor.enabled = preferences.enabled;
@@ -149,8 +174,8 @@
     $('audio-format').textContent = video.channels === 1 ? 'Mono audio' : 'Stereo audio';
     sourceAspect = hasVideo ? video.videoWidth / video.videoHeight : 2;
     $('projection').disabled = $('layout').disabled = !hasVideo;
-    mediaDetail = hasVideo ? video.videoWidth + ' × ' + video.videoHeight + ' streaming preview' : bypass ? 'Audio' : 'Audio · PowerMap';
-    $('detail').textContent = mediaDetail + (bypass ? ' · ' + video.channels + 'ch · Bypass' : ' · initializing spatial audio');
+    mediaDetail = hasVideo ? video.videoWidth + ' × ' + video.videoHeight : 'Audio';
+    updateDetail();
     void selectProjection(); transport();
   }
   function firstFrame() {
@@ -160,7 +185,7 @@
   }
   function canPlay() {
     ready = true; $('empty').hidden = true;
-    $('play').disabled = $('mute').disabled = false; transport();
+    $('play').disabled = false; $('mute').disabled = video.channels === 0; transport();
     if (stats.canPlayMs === null) { stats.canPlayMs = performance.now(); diagnostic('Streaming canplay: ' + stats.canPlayMs.toFixed(1) + ' ms'); }
   }
   video.addEventListener('loadedmetadata', metadata);
@@ -202,18 +227,21 @@
     icon($('mute'), monitor.muted ? 'volume-x' : 'volume-2', monitor.muted ? 'Unmute' : 'Mute');
     persist({ muted: monitor.muted });
   });
-  $('listening').addEventListener('change', () => { monitor.setMode($('listening').value); persist({ listening: $('listening').value }); });
-  $('enabled').addEventListener('change', () => { monitor.setEnabled($('enabled').checked); lastMap = null; clear(); persist({ enabled: $('enabled').checked }); });
+  $('listening').addEventListener('change', () => { monitor.setMode($('listening').value); persist({ listening: $('listening').value }); updateDetail(); });
+  $('enabled').addEventListener('change', () => { monitor.setEnabled($('enabled').checked); lastMap = null; clear(); persist({ enabled: $('enabled').checked }); updateDetail(); });
   $('opacity').addEventListener('input', () => { level('opacity'); persist({ opacity: Number($('opacity').value) }); draw(); });
   $('projection').addEventListener('change', () => { persist({ projection: $('projection').value }); void selectProjection(); });
   $('layout').addEventListener('change', () => { persist({ layout: $('layout').value }); void selectProjection(); });
+  $('grid').addEventListener('change', () => { persist({ grid: $('grid').checked }); updateGrid(); });
+  $('gridOpacity').addEventListener('input', () => { level('gridOpacity'); persist({ gridOpacity: Number($('gridOpacity').value) }); updateGrid(); });
   async function selectView(mode) {
     viewMode = mode;
     try {
       if (mode === 'spatial' && !view) {
         if (!window.FoaView) await (viewLoading ||= import(video.dataset.view));
         if (viewMode !== 'spatial') return;
-        view = new window.FoaView($('spatial'), video, canvas, monitor);
+        view = new window.FoaView($('spatial'), video, canvas, monitor, $('direction-grid'));
+        view.setGridEnabled($('grid').checked);
         view.restore(preferences);
         view.onChange = camera => persist(camera);
       }
@@ -234,16 +262,12 @@
   }
   $('reset-view').addEventListener('click', () => view?.reset());
   $('reset-settings').addEventListener('click', () => { persist({ ...defaults }); applyPreferences(); });
-  $('order').addEventListener('change', () => { monitor.setOrder($('order').value); lastMap = null; clear(); persist({ order: $('order').value }); });
+  $('order').addEventListener('change', () => { monitor.setOrder($('order').value); lastMap = null; clear(); persist({ order: $('order').value }); updateDetail(); });
   $('normalization').addEventListener('change', () => {
     monitor.setNormalization($('normalization').value); lastMap = null; clear(); updateClock();
     persist({ normalization: $('normalization').value });
   });
   $('retry').addEventListener('click', () => location.reload());
-  $('fullscreen').addEventListener('click', async () => {
-    try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.body.requestFullscreen(); }
-    catch { $('detail').textContent = 'Use VS Code: Toggle Full Screen.'; }
-  });
   window.addEventListener('message', ({ data }) => { if (data?.type === 'suspend') video.pause(); });
   window.addEventListener('pagehide', () => { projectionRequest++; projector?.dispose(); view?.dispose(); monitor.dispose(); });
   window.__PANO_PLAYER__ = { monitor, get view() { return view; }, getState: () => ({

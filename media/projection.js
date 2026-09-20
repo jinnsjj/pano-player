@@ -61,6 +61,11 @@ export class PanoProjection {
     this.gpu.debug.onShaderError = () => { throw new Error('Projection shader could not compile.'); };
   }
   configure(projection, layout) {
+    if (this.source.width !== this.sourceWidth || this.source.height !== this.sourceHeight) {
+      // WebGL texture storage cannot be resized after its first upload.
+      this.texture.dispose();
+      this.sourceWidth = this.source.width; this.sourceHeight = this.source.height;
+    }
     const crop = this.material.uniforms.crop.value;
     crop.set(layout === 'sbs' ? .5 : 1, layout === 'tb' ? .5 : 1);
     const width = Math.max(1, Math.floor(this.source.width * crop.x));

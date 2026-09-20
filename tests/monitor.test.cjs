@@ -53,6 +53,17 @@ test('normalization changes reset stale frames without reopening media', async (
   assert.equal(m.normalization, 'N3D');
   assert.equal(m.generation, 1);
 });
+test('video without audio never initializes AudioContext, worklets or spatial DSP', async () => {
+  let contexts = 0;
+  const { m, video, errors } = monitor({ AudioContext: class { constructor() { contexts++; throw new Error('Audio unavailable'); } } });
+  video.metadata = Promise.resolve(); video.channels = 0;
+  video.attach = () => { throw new Error('Unexpected audio attach'); };
+  video.fail = error => errors.push(error.message);
+  await m.prepare(); await m.resume();
+  assert.equal(contexts, 0); assert.deepEqual(errors, []);
+  assert.equal(m.getState().state, 'no-audio'); assert.equal(m.getState().clock, 'video');
+  assert.equal(m.renderer, undefined); assert.equal(m.ready, true);
+});
 test('single native clock routes exactly one monitor and honors volume, mute and rotation', () => {
   const { m, video } = monitor();
   m.source = {}; m.output = { gain: {} }; m.fallback = { gain: {} }; m.stereo = { gain: {} };
@@ -108,7 +119,7 @@ test('non-FOA channels retain fallback playback; old worklet frames cannot cross
   const { m, video, errors, maps } = monitor();
   m.source = {}; m.output = { gain: {} }; m.fallback = { gain: {} }; m.stereo = { gain: {} };
   await m.frame({ type: 'error', epoch: 0, channelCount: 2 });
-  assert.equal(m.ready, false); assert.equal(m.fallback.gain.value, .7);
+  assert.equal(m.ready, false); assert.equal(m.fallback.gain.value, 1);
   assert.match(errors[0], /2 channels/); assert.equal(video.paused, false);
   const messages = []; m.capture = { port: { postMessage: value => messages.push(value) } };
   m.setOrder('WXYZ');
@@ -120,7 +131,11 @@ test('non-FOA channels retain fallback playback; old worklet frames cannot cross
   assert.equal(m.ready, true);
   let finish; m.context = { sampleRate: 48000 };
   m.service = { requestMap: () => new Promise(resolve => { finish = resolve; }), reset() {} };
-  const pending = m.frame({ type: 'frame', epoch: 1, channels: [] });
+  assert.equal(m.enabled, false);
+  await m.frame({ type: 'frame', epoch: 1, channels: [] });
+  assert.equal(finish, undefined);
+  m.setEnabled(true);
+  const pending = m.frame({ type: 'frame', epoch: m.generation, channels: [] });
   m.reset(); finish({ map: new Float32Array(9800) }); await pending;
   assert.equal(maps.length, 0);
 });
