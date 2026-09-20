@@ -2,7 +2,7 @@
   "name": "pano-player",
   "displayName": "PanoPlayer",
   "description": "Play ERP and EAC panoramas, mono or stereo video, with spatial FOA audio and live PowerMap overlays.",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "icon": "media/icon.png",
   "publisher": "shijunjie",
   "author": "Junjie Shi",
@@ -51,11 +51,11 @@
   "contributes": {
     "commands": [
       {
-        "command": "foaPowermap.open",
+        "command": "panoPlayer.open",
         "title": "PanoPlayer: Open Media"
       },
       {
-        "command": "foaPowermap.clearCache",
+        "command": "panoPlayer.clearCache",
         "title": "PanoPlayer: Clear Playback Cache"
       }
     ],
@@ -95,7 +95,7 @@
     "menus": {
       "explorer/context": [
         {
-          "command": "foaPowermap.open",
+          "command": "panoPlayer.open",
           "when": "(resourceScheme == file || resourceScheme == vscode-remote) && resourceExtname =~ /\\.(mp4|webm|wav|mov|mkv)$/i",
           "group": "navigation"
         }

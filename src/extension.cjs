@@ -49,13 +49,13 @@ function activate(context) {
     vscode.window.registerCustomEditorProvider('foaPowermap.player', provider, {
       supportsMultipleEditorsPerDocument: false, webviewOptions: { retainContextWhenHidden: true },
     }),
-    vscode.commands.registerCommand('foaPowermap.open', async uri => {
+    vscode.commands.registerCommand('panoPlayer.open', async uri => {
       const selected = uri || (await vscode.window.showOpenDialog({ canSelectMany: false,
         filters: { 'Panorama media': ['mp4', 'webm', 'wav', 'mov', 'mkv'] } }))?.[0];
       if (selected) await vscode.commands.executeCommand('vscode.openWith', selected, 'foaPowermap.player');
     }),
     // Explicit cleanup for old releases; never part of preview startup.
-    vscode.commands.registerCommand('foaPowermap.clearCache', async () => {
+    vscode.commands.registerCommand('panoPlayer.clearCache', async () => {
       const cache = vscode.Uri.joinPath(context.globalStorageUri, '..', 'spatial-audio-tools.foa-powermap-player', 'playback-v1');
       await require('node:fs/promises').rm(cache.fsPath, { recursive: true, force: true });
       void vscode.window.showInformationMessage('Legacy FOA PowerMap playback cache cleared. Native preview does not create media proxies.');

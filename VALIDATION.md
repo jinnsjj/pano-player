@@ -1,5 +1,14 @@
 # Validation
 
+## PanoPlayer Command IDs, 2026-09-20
+
+Source version: 0.4.9. Commands and the Explorer menu now use `panoPlayer.open`
+and `panoPlayer.clearCache`. The custom editor ID remains `foaPowermap.player`
+to preserve existing file associations. Custom keybindings/scripts must use the
+new command IDs; no legacy command aliases are registered.
+The local/remote activation test checks manifest/registration consistency and
+both direct-file and file-picker routing. VSIX ZIP copies are excluded from packaging.
+
 ## Marketplace Publisher Configuration, 2026-09-19
 
 Source version: 0.4.8. The first Marketplace package uses the existing publisher
