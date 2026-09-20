@@ -3,6 +3,7 @@ tests/**
 **/__pycache__/**
 **/*.pyc
 *.vsix
+*.vsix.zip
 node_modules/**
 .vscode/**
 output/**

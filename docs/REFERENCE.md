@@ -1,21 +1,25 @@
 # PanoPlayer Technical Reference
 
 For a feature overview and runtime screenshots, see the [introduction](../README.md).
+This reference describes version 0.4.9.
 
 Preview ERP/EAC panoramas and mono or stereo video in VS Code, with a live
 MUSIC direction map and binaural audio for four-channel FOA sources.
 
 ## Install
 
-Install the current `pano-player-*.vsix` using **Extensions: Install from VSIX...**,
-then right-click media and select **Open With > PanoPlayer**.
+Install [PanoPlayer from Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=shijunjie.pano-player),
+or run `code --install-extension shijunjie.pano-player`.
+For manual installation, use **Extensions: Install from VSIX...** with the current
+`pano-player-*.vsix`. Then right-click media and select **Open With > PanoPlayer**.
 **PanoPlayer: Open Media** also opens local or workspace-host files.
 The Marketplace publisher identifier is `shijunjie`, so the extension ID is
 `shijunjie.pano-player`. The publisher display name and author are `Junjie Shi`.
 Uninstall the previous local `JunjieShi.pano-player`, `spatial-audio-tools.pano-player` or the older
-`spatial-audio-tools.foa-powermap-player` before using the new package. Internal
-`foaPowermap.*` command/editor IDs remain stable for existing editor associations;
-do not enable the old and new packages together.
+`spatial-audio-tools.foa-powermap-player` before using the new package.
+Updates within `shijunjie.pano-player` keep the same extension identity.
+The editor view type remains `foaPowermap.player` to preserve existing editor
+associations; do not enable the old and new packages together.
 MOV and MKV are also offered in Open With, the context menu and the file picker;
 they use the existing playback pipeline and codec restrictions unchanged.
 
@@ -30,6 +34,20 @@ Linux browsers/webviews, including Cloud IDE. This is architectural portability,
 not a claim that all platforms have been tested. Video decoding still depends on
 the host browser's WebCodecs codec support; a Node workspace extension host is
 required, so browser-only vscode.dev without a remote host is not supported.
+
+## Commands
+
+| Command Palette title | Command ID |
+| --- | --- |
+| PanoPlayer: Open Media | `panoPlayer.open` |
+| PanoPlayer: Clear Playback Cache | `panoPlayer.clearCache` |
+
+Starting with 0.4.9, update custom keybindings or scripts that used
+`foaPowermap.open` or `foaPowermap.clearCache`; those command IDs are no longer
+registered. The Explorer context menu uses `panoPlayer.open`. The editor view type
+`foaPowermap.player` is not a command ID and has not changed.
+Clear Playback Cache only removes legacy 0.1.x proxy files; the streaming player
+does not create them or run cleanup during preview startup.
 
 ## Streaming Playback
 
@@ -92,7 +110,9 @@ uploads them elsewhere, or modifies VS Code's built-in Media Preview/libraries.
 
 ## Cloud IDE
 
-Install the VSIX in the Cloud IDE workspace and reload that workspace window.
+Install PanoPlayer in the remote workspace extension host, not only on the local
+desktop. Use Marketplace when available, or install the VSIX in the Cloud IDE
+workspace and reload that workspace window.
 Open files on its workspace host, not paths from the browser computer.
 Media travels in bounded 256 KiB reads through the extension's webview messaging;
 only the opened document can be read, with at most four concurrent requests.
@@ -103,13 +123,12 @@ Cloud IDE must allow media resource reads, seeking and Web Audio/Worker/WASM exe
 A backpressured window-to-worker bridge preserves bounded reads. No extra server
 is required. Network speed and video codec support still matter.
 
-**PanoPlayer: Clear Playback Cache** explicitly removes old 0.1.x proxy files.
-The streaming player does not create such files or run cleanup during preview startup.
-
 ## Development
 
 ```sh
 git lfs install
+git clone https://github.com/jinnsjj/pano-player.git
+cd pano-player
 git lfs pull
 npm ci
 npm test
@@ -117,9 +136,9 @@ npm run package
 code --extensionDevelopmentPath="$PWD"
 ```
 
-This directory is an independent Git repository. Run the commands above from its
-root; no sibling checkout or parent project is required. The initial source snapshot
-comes from `foa-recon-demo/vscode-foa-powermap`; earlier history stays in that project.
+For an existing checkout, skip the clone and change-directory steps. This is an
+independent repository; no sibling checkout or parent project is required. Public
+history starts with a clean source snapshot; earlier local history was not uploaded.
 FFmpeg/libav source archives and libav runtime files use Git LFS. Installed VSIX
 users do not need Git LFS; only source checkouts need the objects downloaded before
 testing or packaging. Do not package a checkout containing LFS pointer placeholders.
