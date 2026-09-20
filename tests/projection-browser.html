@@ -31,7 +31,7 @@ try {
   const host = document.createElement('div'); host.style.cssText = 'position:relative;width:640px;height:360px'; document.body.append(host);
   const map = document.createElement('canvas'); map.width = 140; map.height = 70;
   const video = { element: source, displayElement: actual, readyState: 4, currentTime: 0 };
-  const view = new window.FoaView(host, video, map, { setOrientation() {} });
+  const view = new window.FoaView(host, video, map, { setOrientation() {} }, document.createElement('canvas'));
   view.configure(true, true, '360');
   const sample = () => {
     readback.width = 64; readback.height = 36; read.drawImage(host.querySelector('canvas'), 0, 0, 64, 36);

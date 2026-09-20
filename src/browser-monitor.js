@@ -10,8 +10,8 @@ async function loadScriptBlob(url, signal) {
 export class FoaMonitor {
   constructor(video, onError, onMap = () => {}) {
     this.video = video; this.onError = onError; this.onMap = onMap;
-    this.mode = 'binaural'; this.volume = .7; this.muted = false;
-    this.order = 'WYZX'; this.enabled = true; this.generation = 0;
+    this.mode = 'binaural'; this.volume = 1; this.muted = false;
+    this.order = 'WYZX'; this.enabled = false; this.generation = 0;
     this.normalization = 'SN3D';
     this.ready = false; this.state = 'initializing'; this.channelCount = null;
     this.events = new AbortController();
@@ -34,10 +34,16 @@ export class FoaMonitor {
     return this.initialized;
   }
   async initialize() {
-    this.context = new AudioContext();
     if (this.video.attach) {
       await this.video.metadata;
       if (this.disposed) return;
+      if (this.video.channels === 0) {
+        this.noAudio = true; this.channelCount = 0; this.ready = true; this.state = 'no-audio';
+        return;
+      }
+    }
+    this.context = new AudioContext();
+    if (this.video.attach) {
       if ([1, 2].includes(this.video.channels)) {
         this.bypass = true; this.channelCount = this.video.channels;
         this.fallback = this.context.createGain(); this.fallback.connect(this.context.destination);
@@ -134,7 +140,7 @@ export class FoaMonitor {
     this.normalization = normalization; this.reset(); this.configure();
   }
   async frame(data) {
-    if (this.bypass) return;
+    if (this.bypass || this.noAudio) return;
     if (this.disposed || data.epoch !== this.generation || this.video.paused || this.video.readyState < 2) return;
     if (data.type === 'error') {
       this.channelCount = data.channelCount; this.ready = false; this.state = 'unsupported-channels';
@@ -183,10 +189,10 @@ export class FoaMonitor {
     void this.context?.close();
   }
   getState() {
-    return { mode: this.bypass ? 'bypass' : this.mode, ready: this.ready, state: this.state, channels: this.channelCount,
+    return { mode: this.noAudio ? 'none' : this.bypass ? 'bypass' : this.mode, ready: this.ready, state: this.state, channels: this.channelCount,
       normalization: this.normalization,
       sampleRate: this.context?.sampleRate, time: this.video.currentTime, generation: this.generation,
-      clock: this.video.attach ? 'consumed-pcm' : 'native-media', contextState: this.context?.state };
+      clock: this.noAudio ? 'video' : this.video.attach ? 'consumed-pcm' : 'native-media', contextState: this.context?.state };
   }
 }
 if (typeof window !== 'undefined') window.FoaMonitor = FoaMonitor;

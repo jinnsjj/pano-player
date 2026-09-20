@@ -17,14 +17,15 @@ Review 180° and 360° video with four-channel first-order Ambisonics (FOA), cam
 
 ![PanoPlayer Panorama view with a live sound-direction overlay and playback and audio controls below](docs/images/panorama.jpg)
 
-*Panorama view shows the full scene alongside sound directions. Projection, view, PowerMap, and audio settings stay together below the picture.*
+*Panorama view shows the full scene alongside sound directions. View tabs sit in the transport bar; Projection, Overlay, and Audio controls occupy three rows below it.*
 
 ## Explore The Scene
 
 - **Panorama**: see the unfolded scene and sound directions together.
 - **Perspective**: drag to look around, scroll to change the field of view, and reset to face forward.
 - **Viewfinder thumbnail**: locate your current view within the full panorama.
-- **Playback controls**: switch view tabs, seek, adjust volume, mute, and enter full screen without reopening the file.
+- **Overlay grid**: optional 30-degree azimuth/elevation lines with front, left, right and back labels, in both views. Grid and PowerMap have independent toggles and opacity sliders; Grid is available even without audio.
+- **Playback controls**: switch view tabs, reset the camera, seek, adjust volume, and mute without reopening the file.
 
 ![PanoPlayer perspective view with a panorama viewfinder thumbnail and Binaural monitoring selected](docs/images/spatial.jpg)
 
@@ -54,7 +55,7 @@ Auto reevaluates each video and stereo layout. It is a heuristic, not projection
 
 ## Keep Your Settings
 
-Projection, layout, view, camera direction, audio, volume, mute, and overlay settings carry over between files and restarts. Use **Restore default settings** to reset them without interrupting playback. Playback position is not carried over; local and remote extension hosts keep separate preferences.
+Projection, layout, view, camera direction, audio, volume, mute, and both overlay toggles and opacities carry over between files and restarts. Use **Restore default settings** to reset them without interrupting playback. Playback position is not carried over; local and remote extension hosts keep separate preferences.
 
 ## Spatial Audio Without Video
 
@@ -66,6 +67,8 @@ Play FOA WAV files with a standalone full-sphere PowerMap, channel-order and nor
 
 Mono and stereo video retain Panorama and Perspective viewing. Audio passes through with its decoded channels preserved, with volume and mute controls.
 
+Videos without an audio track also play in both views, with seeking and replay. Audio and PowerMap controls are disabled without changing your saved audio preferences.
+
 ## Streaming And Remote Media
 
 - **Four-channel MP4 + AAC and WebM + Opus** use bundled WASM audio decoders. Playback decodes as data arrives rather than waiting for a whole-file transcode.
@@ -74,7 +77,7 @@ Mono and stereo video retain Panorama and Perspective viewing. Audio passes thro
 - **No extra decoder setup**: no user-installed FFmpeg, FFprobe, Python, server, or port forwarding.
 - **Source files stay unchanged**, and media is not uploaded to third-party processing services.
 
-Video decoding depends on the host browser's WebCodecs support. Perspective view, EAC, and single-eye cropping require WebGL2. The player supports 1, 2, or 4 channels and uses the primary audio track. Other channel counts, track selection, FuMa normalization, and arbitrary cube-face layouts are not supported.
+Video decoding depends on the host browser's WebCodecs support. Perspective view, EAC, and single-eye cropping require WebGL2. When audio is present, the player supports 1, 2, or 4 channels and uses the primary audio track. Other channel counts, track selection, FuMa normalization, and arbitrary cube-face layouts are not supported.
 
 ## Open Your Media
 

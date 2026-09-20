@@ -30,7 +30,7 @@ function activate(context) {
         title: path.basename(document.uri.fsPath), cspSource: panel.webview.cspSource,
         nonce: randomBytes(24).toString('hex'), source: source.toString(), hostMedia: true, preferences,
         script: asset('player.js'), style: asset('player.css'), omnitone: asset('omnitone.min.js'),
-        monitor: asset('monitor.js'), view: asset('view.js'), icons: asset('lucide.min.js'),
+        monitor: asset('monitor.js'), view: asset('view.js'), icons: asset('lucide.min.js'), logo: asset('icon.png'),
         worker: asset('powermap-worker.js'), worklet: asset('foa-capture-processor.js'),
         decoder: asset('stream-worker.js'), pcm: asset('pcm-processor.js'), stream: asset('stream-player.js'),
       });

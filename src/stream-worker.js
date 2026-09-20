@@ -12,7 +12,7 @@ function position(time) {
   pendingAudio?.close(); pendingAudio = undefined;
   audioCursor = Math.round(time * rate);
   // Decode a short preroll to restore AAC overlap/Opus prediction before the requested point.
-  audio = audioSink.samples(time - .12);
+  audio = audioSink?.samples(time - .12);
   video = videoSink?.samples(time);
 }
 async function open(url, libav) {
@@ -22,9 +22,10 @@ async function open(url, libav) {
     handleUnhandledError: error => send({ type: 'error', message: error.message }),
   }) });
   const audioTrack = await input.getPrimaryAudioTrack();
-  if (!audioTrack) throw new Error('No audio track found.');
-  const config = await audioTrack.getDecoderConfig();
-  if (audioTrack.codec === 'aac') {
+  const videoTrack = await input.getPrimaryVideoTrack();
+  if (!audioTrack && !videoTrack) throw new Error('No audio or video track found.');
+  const config = await audioTrack?.getDecoderConfig();
+  if (audioTrack?.codec === 'aac') {
     // VS Code resource service workers support fetch, not cross-origin importScripts.
     for (const source of [libav, libav.replace(/\.js$/, '.wasm.js')]) {
       const response = await fetch(source);
@@ -36,21 +37,21 @@ async function open(url, libav) {
       wasmurl: libav.replace(/\.js$/, '.wasm.wasm') };
   }
   const webm = ['WebM', 'Matroska'].includes((await input.getFormat()).name);
-  const first = webm && audioTrack.codec === 'opus' ? await new EncodedPacketSink(audioTrack).getFirstPacket({ metadataOnly: true }) : null;
+  const first = webm && audioTrack?.codec === 'opus' ? await new EncodedPacketSink(audioTrack).getFirstPacket({ metadataOnly: true }) : null;
   setWebmOpusTiming(webm, first?.sequenceNumber);
-  if (![1, 2, 4].includes(config?.numberOfChannels)) throw new Error(`Only mono, stereo or four-channel FOA audio is supported; found ${config?.numberOfChannels ?? 0} channels.`);
-  channelCount = config.numberOfChannels;
-  rate = config.sampleRate;
-  const videoTrack = await input.getPrimaryVideoTrack();
+  if (audioTrack && ![1, 2, 4].includes(config?.numberOfChannels)) throw new Error(`Only mono, stereo or four-channel FOA audio is supported; found ${config?.numberOfChannels ?? 0} channels.`);
+  channelCount = config?.numberOfChannels ?? 0;
+  rate = config?.sampleRate ?? 0;
   const videoConfig = await videoTrack?.getDecoderConfig();
-  audioSink = new AudioSampleSink(audioTrack);
+  audioSink = audioTrack ? new AudioSampleSink(audioTrack) : undefined;
   videoSink = videoTrack ? new VideoSampleSink(videoTrack) : undefined;
   position(0);
-  send({ type: 'metadata', sampleRate: rate, channels: channelCount, codec: audioTrack.codec,
+  send({ type: 'metadata', sampleRate: rate, channels: channelCount, codec: audioTrack?.codec ?? null,
     width: videoConfig?.codedWidth || 0, height: videoConfig?.codedHeight || 0,
     duration: await input.getDurationFromMetadata() });
 }
 async function pullAudio(generation) {
+  if (!audio) return;
   const iterator = audio;
   const buffers = Array.from({ length: channelCount }, () => new Float32Array(Math.ceil(rate * .4)));
   let length = 0, eof = false;
@@ -87,7 +88,7 @@ async function pullVideo(generation) {
   const sample = result.value;
   try {
     const frame = sample.toVideoFrame();
-    send({ type: 'video', frame, time: sample.timestamp }, [frame]);
+    send({ type: 'video', frame, time: sample.timestamp, duration: (frame.duration ?? 0) / 1e6 }, [frame]);
   } finally { sample.close(); }
 }
 self.onmessage = ({ data }) => {

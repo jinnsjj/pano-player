@@ -3,7 +3,7 @@ import { Scene, PerspectiveCamera, SphereGeometry, VideoTexture, CanvasTexture,
 import { viewFootprint } from './view-footprint.js';
 
 class FoaView {
-  constructor(host, video, map, monitor) {
+  constructor(host, video, map, monitor, grid) {
     this.host = host; this.video = video; this.monitor = monitor;
     this.yaw = 0; this.pitch = 0; this.active = false;
     this.scene = new Scene();
@@ -26,6 +26,11 @@ class FoaView {
     this.heatmap = new MeshBasicMaterial({ map: this.mapTexture, transparent: true, depthWrite: false });
     this.overlay = new Mesh(this.geometry, this.heatmap); this.overlay.scale.setScalar(.992);
     this.scene.add(this.overlay);
+    this.gridTexture = new CanvasTexture(grid); this.gridTexture.colorSpace = SRGBColorSpace;
+    this.gridTexture.minFilter = this.gridTexture.magFilter = LinearFilter; this.gridTexture.generateMipmaps = false;
+    this.gridMaterial = new MeshBasicMaterial({ map: this.gridTexture, transparent: true, depthWrite: false });
+    this.grid = new Mesh(this.geometry, this.gridMaterial); this.grid.scale.setScalar(.984);
+    this.grid.visible = false; this.grid.renderOrder = 1; this.scene.add(this.grid);
     this.gpu = new WebGLRenderer({ antialias: true });
     this.gpu.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
     host.append(this.gpu.domElement);
@@ -88,6 +93,10 @@ class FoaView {
   restore({ yaw, pitch, fov }) { this.camera.fov = fov; this.orient(yaw, pitch); }
   reset() { this.camera.fov = 72; this.orient(0, 0); this.changed(); }
   mapChanged() { this.mapTexture.needsUpdate = true; this.render(); }
+  setGridEnabled(enabled) {
+    this.grid.visible = enabled; this.gridTexture.needsUpdate = true;
+    this.thumbnailAt = 0; this.render();
+  }
   sourceChanged() { this.videoTexture.needsUpdate = true; if (this.video.paused) this.render(); }
   render() {
     if (!this.active) return;
@@ -123,11 +132,12 @@ class FoaView {
       ctx.drawImage(this.videoTexture.image, half ? 60 : 0, 0, half ? 120 : 240, 120);
     }
     ctx.drawImage(this.mapTexture.image, 0, 0, 240, 120);
+    if (this.grid.visible) ctx.drawImage(this.gridTexture.image, 0, 0, 240, 120);
     ctx.drawImage(this.footprint, 0, 0);
   }
   dispose() {
     this.events.abort(); this.resize.disconnect();
-    for (const resource of [this.geometry, this.videoTexture, this.mapTexture, this.picture, this.heatmap, this.gpu]) resource.dispose();
+    for (const resource of [this.geometry, this.videoTexture, this.mapTexture, this.gridTexture, this.picture, this.heatmap, this.gridMaterial, this.gpu]) resource.dispose();
     this.gpu.domElement.remove();
     this.thumbnail.remove();
   }

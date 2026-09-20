@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const vm = require('node:vm');
+const { buildSync } = require('esbuild');
 const { defaults, normalize } = require('../src/preferences.cjs');
 function setup(saved = {}) {
   let persisted, onMap, onError;
@@ -12,7 +12,8 @@ function setup(saved = {}) {
       videoWidth: 960, videoHeight: 480, dataset: { defaults: JSON.stringify(defaults), preferences: JSON.stringify(normalize(saved)) }, style: { setProperty(k, v) { this[k] = v; } },
       listeners: {}, addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
       fire(type) { for (const fn of this.listeners[type] || []) fn(); },
-      getContext: () => ({ clearRect() {}, putImageData() {} }), setAttribute() {}, removeAttribute() {}, load() {},
+      width: 2048, height: 1024,
+      getContext: () => ({ clearRect() {}, putImageData() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, strokeText() {}, fillText() {} }), setAttribute() {}, removeAttribute() {}, load() {},
       pause() { this.paused = true; }, play() { this.paused = false; return Promise.resolve(); },
     });
     return elements.get(id);
@@ -32,15 +33,16 @@ function setup(saved = {}) {
     setMuted(value) { this.muted = value; } dispose() {} getState() { return { ready: false, mode: this.mode, volume: this.volume, muted: this.muted }; }
   };
   window.FoaView = class {
+    setGridEnabled(enabled) { this.grid = enabled; }
     configure(active) { this.active = active; } mapChanged() {} sourceChanged() {} render() {} dispose() {} reset() {}
     restore({ yaw, pitch, fov }) { this.camera = { yaw, pitch, fov }; }
-    getState() { return { active: this.active, ...this.camera }; }
+    getState() { return { active: this.active, grid: this.grid, ...this.camera }; }
   };
   window.PanoProjection = class {
     configure(projection, layout) { get('projected').configuration = { projection, layout }; }
     render() { return false; } dispose() {}
   };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../media/player.js'), 'utf8'), {
+  vm.runInNewContext(buildSync({ entryPoints: [require.resolve('../media/player.js')], bundle: true, write: false }).outputFiles[0].text, {
     window, document: { getElementById: get }, performance,
     acquireVsCodeApi: () => ({ getState: () => saved, setState(value) { persisted = value; }, postMessage: m => messages.push(m) }),
     lucide: { createIcons() {} }, requestAnimationFrame() {}, Uint8ClampedArray, ImageData: class {},
@@ -56,6 +58,22 @@ test('native controls and playback do not await a stalled DSP initializer', () =
   assert.equal(video.paused, false); assert.equal(s.get('empty').hidden, true);
   assert.match(s.get('detail').textContent, /Worker unavailable/);
   assert.ok(s.messages.every(message => message.type === 'diagnostic'));
+});
+test('direction grid is independent of audio and PowerMap, remembered and reset in both views', () => {
+  const s = setup(), video = s.get('video');
+  assert.equal(s.get('grid').checked, false); assert.equal(s.get('direction-grid').hidden, true);
+  video.channels = 0; video.fire('loadedmetadata');
+  s.get('grid').checked = true; s.get('grid').fire('change');
+  assert.equal(s.persisted().grid, true); assert.equal(s.get('direction-grid').hidden, false);
+  assert.equal(s.get('enabled').checked, false);
+  s.get('view-spatial').fire('click');
+  assert.equal(s.get('direction-grid').hidden, true); assert.equal(s.state().view.grid, true);
+  const next = setup(s.persisted());
+  assert.equal(next.get('grid').checked, true); assert.equal(next.state().view.grid, true);
+  next.get('view-flat').fire('click'); assert.equal(next.get('direction-grid').hidden, false);
+  next.get('reset-settings').fire('click');
+  assert.equal(next.get('grid').checked, false); assert.equal(next.get('direction-grid').hidden, true);
+  assert.equal(next.state().view.grid, false);
 });
 test('level readouts follow persisted opacity and native slider input', () => {
   const s = setup({ opacity: .42 });
@@ -98,7 +116,6 @@ test('mono/stereo disable FOA controls while retaining Spatial view and transpor
     video.fire('loadedmetadata');
     for (const id of ['enabled', 'opacity', 'order', 'normalization', 'listening']) assert.equal(s.get(id).disabled, true);
     assert.equal(s.get('listening').value, 'bypass');
-    assert.equal(s.get('music-badge').hidden, true);
     assert.match(s.get('detail').textContent, /Bypass/);
     assert.equal(s.get('enabled').checked, false);
     s.get('view-spatial').fire('click');
@@ -109,6 +126,51 @@ test('mono/stereo disable FOA controls while retaining Spatial view and transpor
     assert.equal(s.get('audio-poster').hidden, false);
     assert.equal(s.get('audio-format').textContent, channels === 1 ? 'Mono audio' : 'Stereo audio');
   }
+});
+test('grid and PowerMap have independent persisted opacities and toggles', () => {
+  const s = setup({ grid: true, gridOpacity: .4, opacity: .8 });
+  assert.equal(s.get('gridOpacity-value').textContent, '40%');
+  assert.equal(s.get('opacity-value').textContent, '80%');
+  s.get('gridOpacity').value = '.2'; s.get('gridOpacity').fire('input');
+  assert.equal(s.persisted().gridOpacity, .2); assert.equal(s.persisted().opacity, .8);
+  s.get('enabled').checked = false; s.get('enabled').fire('change');
+  assert.equal(s.get('grid').checked, true); assert.equal(s.get('direction-grid').hidden, false);
+  const next = setup(s.persisted());
+  assert.equal(next.get('gridOpacity-value').textContent, '20%');
+  assert.equal(next.get('enabled').checked, false); assert.equal(next.get('grid').checked, true);
+  next.get('reset-settings').fire('click');
+  assert.equal(next.get('gridOpacity-value').textContent, '100%');
+  assert.equal(next.get('opacity-value').textContent, '75%');
+});
+test('footer combines source dimensions, channels, source sample rate and PowerMap parameters', () => {
+  const s = setup(), v = s.get('video');
+  v.channels = 4; v.sampleRate = 44100; v.fire('loadedmetadata');
+  for (const text of ['960 × 480', '4ch', '44.1 kHz', 'MUSIC', '1 source', '140 × 70', '140 ms interval']) {
+    assert.ok(s.get('detail').textContent.includes(text), text);
+  }
+  v.channels = 2; v.sampleRate = 48000; v.fire('loadedmetadata');
+  assert.match(s.get('detail').textContent, /2ch · 48 kHz · Bypass/);
+  assert.doesNotMatch(s.get('detail').textContent, /MUSIC/);
+  v.channels = 0; v.sampleRate = 0; v.fire('loadedmetadata');
+  assert.match(s.get('detail').textContent, /960 × 480 · No audio/);
+  assert.doesNotMatch(s.get('detail').textContent, /kHz|MUSIC/);
+});
+test('video-only media keeps transport and Perspective, disables audio and preserves FOA preferences', () => {
+  const s = setup({ listening: 'stereo', enabled: true }), video = s.get('video');
+  video.channels = 0; video.fire('loadedmetadata'); video.fire('canplay');
+  for (const id of ['enabled', 'opacity', 'order', 'normalization', 'listening', 'volume', 'mute']) assert.equal(s.get(id).disabled, true, id);
+  assert.equal(s.get('listening').value, 'none');
+  assert.equal(s.get('enabled').checked, false);
+  assert.equal(s.get('play').disabled, false); assert.equal(s.get('seek').disabled, false);
+  assert.match(s.get('detail').textContent, /No audio/);
+  s.get('view-spatial').fire('click'); assert.equal(s.state().view.active, true);
+  assert.equal(s.persisted().listening, 'stereo'); assert.equal(s.persisted().enabled, true);
+  s.get('reset-settings').fire('click');
+  assert.equal(s.get('listening').value, 'none'); assert.equal(s.get('mute').disabled, true);
+  video.channels = 4; video.fire('loadedmetadata');
+  assert.equal(s.get('listening').value, defaults.listening);
+  assert.equal(s.get('enabled').checked, defaults.enabled);
+  assert.equal(s.get('volume').disabled, false); assert.equal(s.get('mute').disabled, false);
 });
 test('EAC and single-eye ERP layouts preserve audio clock, full overlay and Spatial tabs', () => {
   const s = setup(), video = s.get('video');
@@ -134,7 +196,7 @@ test('EAC and single-eye ERP layouts preserve audio clock, full overlay and Spat
   assert.equal(video.hidden, false); assert.equal(s.get('projected').hidden, true);
 });
 test('seek, order change and overlay disable reject stale maps without reopening media', () => {
-  const s = setup(), v = s.get('video');
+  const s = setup({ enabled: true }), v = s.get('video');
   const map = { generation: s.state().generation, time: 0, rgba: new Uint8ClampedArray(39200), computeMs: 1 };
   s.onMap(map); assert.equal(s.state().received, 1);
   v.fire('seeking'); s.onMap(map); assert.equal(s.state().received, 1);

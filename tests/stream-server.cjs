@@ -19,16 +19,25 @@ const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.end(fs.readFileSync(path.join(__dirname, 'projection-browser.html'))); return;
   }
+  if (url.pathname === '/projection-startup-test') {
+    res.setHeader('Content-Type', 'text/html');
+    res.end(fs.readFileSync(path.join(__dirname, 'projection-startup.html'))); return;
+  }
+  if (url.pathname === '/grid-test') {
+    res.setHeader('Content-Type', 'text/html');
+    res.end(fs.readFileSync(path.join(__dirname, 'grid-browser.html'))); return;
+  }
   if (url.pathname === '/') {
     const index = Number(url.searchParams.get('file') || 0);
     if (!files[index]) { res.writeHead(404); res.end(); return; }
     const html = renderHtml({ title: path.basename(files[index]), cspSource: origin, nonce: 'qa', source: `${origin}/source/${index}`, preferences,
-      ...Object.fromEntries(Object.entries({ script: 'player.js', style: 'player.css', icons: 'lucide.min.js',
+      ...Object.fromEntries(Object.entries({ script: 'player.js', style: 'player.css', icons: 'lucide.min.js', logo: 'icon.png',
         monitor: 'monitor.js', omnitone: 'omnitone.min.js', view: 'view.js', worker: 'powermap-worker.js',
         worklet: 'foa-capture-processor.js', decoder: 'stream-worker.js', pcm: 'pcm-processor.js', stream: 'stream-player.js',
       }).map(([key, value]) => [key, `${origin}/${value}`])) });
     res.setHeader('Content-Type', 'text/html');
-    res.end(html.replace('<body>', `<body><script nonce="qa">window.acquireVsCodeApi=()=>({getState:()=>null,setState:()=>{},postMessage:m=>fetch('/diagnostic',{method:'POST',body:JSON.stringify(m)})});window.addEventListener('error',e=>fetch('/diagnostic',{method:'POST',body:e.message}));</script>`)); return;
+    const theme = url.searchParams.get('theme') === 'light' ? 'vscode-light' : 'vscode-dark';
+    res.end(html.replace('<body>', `<body class="${theme}"><script nonce="qa">window.acquireVsCodeApi=()=>({getState:()=>null,setState:()=>{},postMessage:m=>fetch('/diagnostic',{method:'POST',body:JSON.stringify(m)})});window.addEventListener('error',e=>fetch('/diagnostic',{method:'POST',body:e.message}));</script>`)); return;
   }
   const file = url.pathname.startsWith('/source/') ? files[Number(url.pathname.slice(8))] : path.join(__dirname, '../media', path.basename(url.pathname));
   if (!file || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404); res.end(); return; }
