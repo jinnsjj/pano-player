@@ -76,10 +76,6 @@ Both show **Front** upright and centered, with **Left** and **Right** at the sid
 The overview shows the unfolded panorama and current field of view. EAC must be
 selected manually; Auto only infers 180° or 360° ERP.
 
-These are actual player captures. The supplied reference images were encoded as
-short silent videos for playback, so audio controls are disabled. This comparison
-demonstrates projection rendering, not differences in codec quality or direct JPEG support.
-
 ## Keep Your Settings
 
 Projection, layout, rotation, view, camera direction, audio, volume, mute, overlay toggles and opacities, PowerMap algorithm and MUSIC source count carry over between files and restarts. Use **Restore default settings** to reset them without interrupting playback. Playback position is not carried over; local and remote extension hosts keep separate preferences.
@@ -132,8 +128,5 @@ to one project, put the entries in that workspace's `.vscode/settings.json` inst
 Remove the entries to return to VS Code's default behavior.
 
 Requires VS Code 1.84+ and a Node extension host with access to workspace files. Cloud IDE must allow Webviews, Workers, WebAssembly, and Web Audio. Browser-only vscode.dev without a remote extension host is not supported.
-
-Screenshots show PanoPlayer 0.4.17 running in a local browser test host, captured on
-2026-09-21, not mockups. They do not imply validation on every Cloud IDE or platform.
 
 For installation and development, see the [technical reference](docs/REFERENCE.md). See [third-party notices](THIRD_PARTY_NOTICES.md) for component licenses.
