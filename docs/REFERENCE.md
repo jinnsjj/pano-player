@@ -68,7 +68,7 @@ after monitoring, volume and mute, without altering the audible path.
 - Peak and True Peak have separate L/R bars stacked vertically with matching origins, lengths and scales for direct comparison, plus clipped-sample counts and retained maxima. Bars attack immediately and decay with a 150 ms amplitude half-life. Markers retain maxima until reset, not the current window's peak above RMS. Clipping turns the readout and marker red.
 - RMS-M and LUFS-M use 400 ms windows; LUFS-S uses 3 seconds. Statistics advance every 100 ms. RMS-I accumulates playback energy; LUFS-I applies absolute and relative gating.
 - RMS sums L/R energy, matching the reference JSFX's stereo convention. It is not the arithmetic average of channel dB values. LUFS uses K-weighting; LRA uses gated short-term loudness and 10th/95th percentiles with 0.1 LU histogram bins.
-- True Peak uses the reference's 32-tap sinc interpolation: 4x below 96 kHz and 2x at higher rates. This is a reconstructed-peak estimate, not a hardware output measurement or a certification claim.
+- True Peak uses the reference's 32-tap sinc interpolation: 4x below 96 kHz and 2x at higher rates. This is a reconstructed-peak estimate, not a hardware output measurement.
 - Values show `--` before enough samples exist. LRA requires at least 20 accepted short-term observations. Pause retains statistics; Reset, starting playback, seeking, changing monitor mode/order/normalization, or reopening the overlay clears them. Volume and mute do not erase historical peaks.
 
 The DSP is adapted from Cockos `analysis/loudness_meter` shipped with REAPER 7.52;
