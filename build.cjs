@@ -6,6 +6,7 @@ async function main() {
   for (const [input, output] of [
     ['src/icons.js', 'lucide.min.js'],
     ['src/browser-monitor.js', 'monitor.js'],
+    ['src/level-meter-processor.js', 'level-meter-processor.js'],
     ['src/stream-player.js', 'stream-player.js'],
     ['src/stream-worker.js', 'stream-worker.js'],
     ['src/powermap/wav-stream-processor.js', 'pcm-processor.js'],

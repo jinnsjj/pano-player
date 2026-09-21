@@ -60,7 +60,7 @@ function activate(context) {
     }),
     vscode.commands.registerCommand('panoPlayer.open', async uri => {
       const selected = uri || (await vscode.window.showOpenDialog({ canSelectMany: false,
-        filters: { 'Panorama media': ['mp4', 'webm', 'wav', 'mov', 'mkv'] } }))?.[0];
+        filters: { 'Panorama media': ['mp4', 'webm', 'wav', 'flac', 'mov', 'mkv'] } }))?.[0];
       if (selected) await vscode.commands.executeCommand('vscode.openWith', selected, 'panoPlayer.player');
     }));
 }

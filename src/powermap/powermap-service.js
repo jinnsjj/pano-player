@@ -38,6 +38,7 @@ export class PowermapService {
 
   requestMap(sessionId, time, {
     channels,
+    algorithm,
     mapAverage,
     numSources,
     reset = false,
@@ -52,6 +53,7 @@ export class PowermapService {
     return new Promise((resolve, reject) => {
       const request = {
         channels,
+        algorithm,
         requestId: this.nextRequestId,
         mapAverage,
         numSources,
@@ -69,7 +71,11 @@ export class PowermapService {
   }
 
   reset(sessionId) {
-    if (!this.sessions.has(sessionId) || this.disposed) return;
+    const session = this.sessions.get(sessionId);
+    if (!session || this.disposed) return;
+    session.pending?.resolve(null);
+    session.pending = null;
+    session.needsReset = true;
     this.worker.postMessage({ type: 'reset', sessionId });
   }
 
@@ -98,14 +104,16 @@ export class PowermapService {
     this.worker.postMessage({
       type: 'analyze',
       channels: request.channels,
+      algorithm: request.algorithm,
       sessionId,
       requestId: request.requestId,
       sampleRate: request.sampleRate,
       time: request.time,
       mapAverage: request.mapAverage,
       numSources: request.numSources,
-      reset: request.reset,
+      reset: request.reset || Boolean(session.needsReset),
     }, request.channels.map((channel) => channel.buffer));
+    session.needsReset = false;
   }
 
   handleMessage(message) {

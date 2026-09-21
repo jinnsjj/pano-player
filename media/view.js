@@ -3,9 +3,10 @@ import { Scene, PerspectiveCamera, SphereGeometry, VideoTexture, CanvasTexture,
 import { viewFootprint } from './view-footprint.js';
 
 class FoaView {
-  constructor(host, video, map, monitor, grid) {
+  constructor(host, video, map, monitor, grid, overviewHost = host) {
     this.host = host; this.video = video; this.monitor = monitor;
     this.yaw = 0; this.pitch = 0; this.active = false;
+    this.overviewEnabled = true;
     this.scene = new Scene();
     this.camera = new PerspectiveCamera(72, 2, .1, 100);
     this.camera.rotation.order = 'YXZ';
@@ -36,8 +37,8 @@ class FoaView {
     host.append(this.gpu.domElement);
     this.thumbnail = document.createElement('canvas');
     this.thumbnail.id = 'pano-thumbnail'; this.thumbnail.width = 240; this.thumbnail.height = 120;
-    this.thumbnail.setAttribute('aria-label', 'Panorama overview with current field of view');
-    host.append(this.thumbnail);
+    this.thumbnail.setAttribute('aria-label', 'PanoView: panorama overview with current field of view');
+    overviewHost.append(this.thumbnail);
     this.thumbContext = this.thumbnail.getContext('2d');
     this.footprint = document.createElement('canvas'); this.footprint.width = 240; this.footprint.height = 120;
     this.resize = new ResizeObserver(() => this.render()); this.resize.observe(host);
@@ -74,8 +75,9 @@ class FoaView {
       this.videoTexture.dispose(); this.videoTexture.image = image;
       this.sourceWidth = image.width; this.sourceHeight = image.height;
     }
-    this.thumbnailAt = 0;
-    this.sourceChanged();
+    this.thumbnailAt = -Infinity;
+    this.videoTexture.needsUpdate = true;
+    // Apply the restored pose before any render can cache the overview footprint.
     this.orient(this.yaw, this.pitch);
   }
   orient(yaw, pitch) {
@@ -97,7 +99,19 @@ class FoaView {
     this.grid.visible = enabled; this.gridTexture.needsUpdate = true;
     this.thumbnailAt = 0; this.render();
   }
-  sourceChanged() { this.videoTexture.needsUpdate = true; if (this.video.paused) this.render(); }
+  setOverviewEnabled(enabled) {
+    if (this.overviewEnabled === enabled) return;
+    this.overviewEnabled = enabled;
+    this.thumbnailAt = -Infinity;
+    if (enabled) this.render();
+  }
+  sourceChanged() {
+    this.videoTexture.needsUpdate = true;
+    if (this.video.paused) {
+      // No playback tick will retry a first frame or seek skipped by the throttle.
+      this.thumbnailAt = -Infinity; this.render();
+    }
+  }
   render() {
     if (!this.active) return;
     // A texture created while paused may never receive a video-frame callback.
@@ -114,6 +128,7 @@ class FoaView {
     this.drawThumbnail();
   }
   drawThumbnail() {
+    if (!this.overviewEnabled) return;
     const key = [this.yaw, this.pitch, this.camera.fov, this.camera.aspect].join(',');
     const changed = key !== this.footprintKey;
     if (changed) {

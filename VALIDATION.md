@@ -1,6 +1,6 @@
 # PanoPlayer Validation
 
-Source version: 0.4.17. Updated 2026-09-20.
+Source version: 0.4.26. Updated 2026-09-21.
 
 ## Naming
 
@@ -25,6 +25,90 @@ links, absence of obsolete runtime identifiers and exclusion of nested VSIX arch
 FFmpeg/libav objects must be fetched through Git LFS before packaging.
 
 ## Acceptance Boundary
+
+Version 0.4.26: 84 automated checks passed, one optional codec test skipped.
+PWD matches independent time-domain steered beam energy; MUSIC checks cover
+one source and two independent sources. Worker/service tests cover option
+validation, forwarding, incompatible averaging history and queued reset work.
+Local Chrome playback produced nonblank maps for PWD and MUSIC with one/two
+sources, without restarting the playback clock. Settings persistence/reset,
+PWD source-count disabling, and mono/stereo/video-only restrictions passed.
+Both secondary menus fit at 1280, 760, 390 and 320 px in dark/light themes;
+screenshots were inspected. Outside-click, Escape, keyboard opening and sliders
+passed, including the eight pointer/keyboard focus regressions. No browser
+JavaScript errors or installed desktop/Cloud IDE revalidation were recorded.
+
+Version 0.4.25: 79 automated checks passed, one optional codec test skipped.
+Reproduced Chrome retaining `:focus-visible` when a keyboard-focused slider is
+subsequently dragged. Actual-player checks covered seek, volume, Grid opacity
+and PowerMap opacity in dark/light themes: pointer down/drag/release hides the
+outline without removing focus; arrow keys still change the value and restore
+the outline; Tab away and back restores keyboard focus styling. All eight cases
+passed with no browser JavaScript errors. Pointer/keyboard transport screenshots
+were inspected. No installed desktop or Cloud IDE revalidation was performed.
+
+Version 0.4.24: 78 automated checks passed, one optional codec test skipped.
+Local Chrome checks at 1280, 760, 390 and 320 px confirmed vertically stacked
+L/R Peak and True Peak bars with identical x coordinates and track widths.
+All ten readouts fit the 240 x 164 px translucent window. A directional FOA tone
+produced visibly different L/R bar lengths with the expected 9.54 dB stereo
+monitor difference. Meter controls, PanoView and playback checks still pass;
+no installed desktop or Cloud IDE revalidation was performed.
+
+Version 0.4.23: 78 automated checks passed, one optional codec test skipped.
+The PanoView and Meters windows share their dragging, keyboard movement, close
+and viewport-clamping implementation. Local Chrome checks covered independent
+toggles, close/Escape, persistence after reopening media, Perspective/Panorama
+switches and paused reopening after camera movement. Moving PanoView left the
+camera unchanged. Canvas-pixel checks confirmed a nonblank panorama, and the
+existing restored-camera/paused-frame regressions still pass. Hidden overviews
+skip rendering and refresh immediately on reopening. Dark/light screenshots
+and both windows at 1280, 760, 390 and 320 px widths were inspected. No browser
+JavaScript errors or installed desktop/Cloud IDE revalidation were recorded.
+
+Version 0.4.22: 76 automated checks passed, one optional codec test skipped.
+Local Chrome checks confirmed a 240 x 148 px meter at 1280, 760, 390 and 320 px
+viewport widths, with all ten readouts and horizontal bars visible without text
+overflow. Computed background alpha is 0.72; panel/readout opacity remains 1.
+Dark/light screenshots over a real rendered ERP fixture were inspected alongside
+the panorama thumbnail. Dragging, keyboard movement, Escape/close, reset, gain,
+mute and all output routes still pass; hover text retains units, maxima and clip
+counts. No installed desktop or Cloud IDE revalidation was performed.
+
+Version 0.4.21: 76 automated checks passed, one optional codec test skipped.
+The optional meter overlay was checked in local Chrome with mono/stereo bypass,
+FOA binaural and stereo monitoring, volume/mute, pause/seek, retained maxima,
+reset/close, dragging/keyboard movement, persistence and video-only disabling.
+All ten meter tracks fit at 1280, 760, 390 and 320 px widths; dark/light screenshots
+were inspected. An intersample-overload fixture triggered True Peak clipping while
+sample peaks remained below 0 dBFS. No browser JavaScript errors were recorded.
+DSP tests cover 44.1/48/96 kHz K-weighting, phase-independent stereo energy,
+150 ms peak decay, gating, LRA and a silent, disabled-by-default worklet.
+On a 24-second, 48 kHz stereo stepped-level/silence fixture, independent FFmpeg
+`ebur128=peak=true` reported -12.6 LUFS integrated, 20.8 LU LRA and -10.0 dBTP;
+the adapted meter returned -12.5996 LUFS, 20.8 LU and -10.0000 dBTP.
+These checks are not EBU certification or installed desktop/Cloud IDE validation.
+
+Version 0.4.19: 69 automated checks passed, one optional codec test skipped.
+The local browser `/rotation-flac-test` passed 36 GPU pixel comparisons across
+0/90/180/270 degrees, mono/SBS/TB and 360/180/EAC, against independent Canvas2D
+source rotations. Generated 48 kHz s16 FLAC tones (220 Hz times channel index)
+passed 1/2/4-channel PCM comparisons within one quantization step, bounded chunk
+decoding, seeks at 0.7 and 5.9 seconds, and exact EOF for six-second files.
+Serve these three files in channel-count order with `tests/stream-server.cjs`.
+Actual player checks exercised four-channel FLAC playback with live PowerMap,
+and 90-degree video rotation in Perspective with a matching overview.
+This verifies the local browser host, not a desktop or Cloud IDE reinstall.
+
+Version 0.4.18 fixes thumbnail startup and restored camera synchronization. Regressions
+first reproduced a paused first frame being throttled, a restored footprint calculated
+from the forward camera, and video readiness waiting for audio. Unit tests now cover
+these cases, paused seeks and retention of the 10 Hz playing-thumbnail limit.
+Automated checks: 68 passed, one optional codec fixture test skipped.
+The local browser `/thumbnail-test` passed real canvas-pixel and footprint comparisons
+for 360 ERP, 180 ERP, SBS, TB and EAC. Actual player navigation/reopening with the
+person-free ERP/EAC clips retained a turned view and a matching, nonblack overview
+while paused. No desktop or Cloud IDE reinstall was performed.
 
 Version 0.4.17 replaces the view icons with Lucide RectangleHorizontal/View and adds
 Globe/Layers/AudioLines to the Projection/Overlay/Audio headings. Local Chrome
@@ -88,6 +172,11 @@ the PowerMap/Audio parameters while retaining Auto, preferences and reset. This 
 layout rollback is covered by markup tests, without another browser size sweep.
 Local/remote host unit tests cover persisted settings injection
 into new editors; the packaged extension was not reinstalled in desktop or Cloud IDE.
-Runtime screenshots in `docs/images/` were captured
-in Chrome on 2026-09-19 and predate the Perspective tab label.
+Runtime screenshots in `docs/images/` were refreshed at 1920 x 1080 on 2026-09-21
+in the local browser test host using the current 0.4.17 UI, rather than upscaling
+earlier captures. Only the supplied person-free projection references and the WAV
+PowerMap are used in the screenshots. The ERP/EAC reference images were
+encoded as temporary silent H.264 clips and rendered through the actual player,
+with matching projection selection and a forward-facing Perspective camera.
+The source images are examples, not player screenshots or evidence of JPEG support.
 Earlier test records remain in Git history rather than this current-release summary.

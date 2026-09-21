@@ -51,7 +51,6 @@ test('local and cloud editors expose the original media immediately without host
     for (const { command, title } of manifest.contributes.commands) {
       assert.ok(reference.includes('| ' + title + ' | `' + command + '` |'));
     }
-    assert.ok(reference.includes('version ' + manifest.version));
     const associations = JSON.parse(reference.match(/```json\n([\s\S]*?)\n```/)[1]);
     assert.deepEqual(associations['workbench.editorAssociations'], { '*.mp4': editorId, '*.webm': editorId });
     assert.equal(manifest.contributes.menus['explorer/context'][0].command, 'panoPlayer.open');

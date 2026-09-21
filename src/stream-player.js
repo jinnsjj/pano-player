@@ -116,6 +116,8 @@ export class StreamPlayer extends EventTarget {
       this.previewFrame = false;
       this.element.getContext('2d').drawImage(frame.frame, 0, 0, this.element.width, this.element.height);
       frame.frame.close(); this.nextFrame = undefined; this.frames++;
+      // A decoded picture is available even while the audio pipeline is initializing.
+      this.readyState = Math.max(this.readyState, 2);
       if (this.channels === 0) {
         this.videoEndTime = frame.time + frame.duration;
         if (this.readyState < 3 || this.seeking) {

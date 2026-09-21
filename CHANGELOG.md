@@ -1,5 +1,75 @@
 # Changelog
 
+## 0.4.26 - 2026-09-21
+
+### Added
+
+- PWD / MUSIC PowerMap selection and one/two assumed sources for MUSIC, remembered across files.
+- Collapsible Grid and PowerMap settings menus, keeping opacity sliders and algorithm controls out of the main toolbar.
+
+### Fixed
+
+- Clear queued analysis and incompatible averaging history when changing PowerMap settings, without interrupting playback.
+
+## 0.4.25 - 2026-09-21
+
+### Fixed
+
+- Hide slider focus outlines during mouse/touch interaction, including after keyboard focus, while retaining focus and keyboard navigation for seek, volume and overlay opacity controls.
+
+## 0.4.24 - 2026-09-21
+
+### Changed
+
+- Stack L/R Peak and True Peak bars vertically with aligned origins, equal track lengths and the same scale, while retaining the compact translucent meter window.
+
+## 0.4.23 - 2026-09-21
+
+### Changed
+
+- Move the panorama overview into an independently toggleable PanoView floating overlay, sharing the compact translucent frame, dragging, keyboard movement and close controls with Meters.
+- Remember PanoView visibility across files; hide it outside Perspective without clearing that preference. Skip hidden thumbnail rendering and refresh immediately when reopened, including while paused.
+
+## 0.4.22 - 2026-09-21
+
+### Changed
+
+- Compact Output Meters to a thumbnail-sized 240 x 148 px overlay with translucent background and opaque readouts. Keep all metrics visible as horizontal mini-bars; show units, retained maxima and clipping counts on hover.
+
+## 0.4.21 - 2026-09-21
+
+### Changed
+
+- Replace the inline meter with an optional, movable Output Meters overlay, with close and statistics-reset controls.
+- Adapt Cockos' JSFX loudness analysis for continuous audio-thread Peak/True Peak, RMS-M/I, LUFS-M/S/I and LRA measurement. Peak bars decay with a 150 ms amplitude half-life; markers retain the maximum until reset.
+- Remember overlay visibility, stop meter DSP when closed, and reset statistics on playback start, seeking and monitor format changes.
+
+## 0.4.20 - 2026-09-21
+
+### Added
+
+- Live L/R output meters with RMS dBFS, sample-peak markers and clipping indicators, following volume and mute in Bypass, Binaural and Stereo Monitor modes.
+
+## 0.4.19 - 2026-09-21
+
+### Added
+
+- Remembered clockwise source rotation (0/90/180/270 degrees), applied before stereo cropping and projection in both views and the overview. Reset restores zero rotation; audio coordinates are unchanged.
+- FLAC in Open With, the context menu and the file picker, using the existing streaming pipeline and native WebCodecs decoding. Mono/stereo bypass and four-channel FOA processing remain available without additional dependencies.
+
+## 0.4.18 - 2026-09-21
+
+### Fixed
+
+- Refresh the Perspective overview immediately when a paused first frame or seek completes, without waiting for playback or camera input.
+- Make decoded video available to the overview while audio is still initializing.
+- Apply the remembered camera direction before calculating the overview window when opening a new media file.
+
+### Documentation
+
+- Add default-editor configuration instructions and refresh screenshots with person-free, 1920 x 1080 player captures.
+- Compare ERP and EAC reference layouts with their actual Perspective rendering.
+
 ## 0.4.17 - 2026-09-20
 
 ### Added

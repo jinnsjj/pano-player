@@ -27,6 +27,14 @@ const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.end(fs.readFileSync(path.join(__dirname, 'grid-browser.html'))); return;
   }
+  if (url.pathname === '/thumbnail-test') {
+    res.setHeader('Content-Type', 'text/html');
+    res.end(fs.readFileSync(path.join(__dirname, 'thumbnail-browser.html'))); return;
+  }
+  if (url.pathname === '/rotation-flac-test') {
+    res.setHeader('Content-Type', 'text/html');
+    res.end(fs.readFileSync(path.join(__dirname, 'rotation-flac-browser.html'))); return;
+  }
   if (url.pathname === '/') {
     const index = Number(url.searchParams.get('file') || 0);
     if (!files[index]) { res.writeHead(404); res.end(); return; }

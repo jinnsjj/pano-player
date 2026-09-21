@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Perspective thumbnail regression</title>
+<style>body { background: #202020; color: white; font: 14px sans-serif; } .view { position: relative; width: 640px; height: 360px; } #pano-thumbnail { position: absolute; right: 8px; bottom: 8px; width: 240px; height: 120px; }</style>
+<h1>Perspective thumbnail regression</h1><output id="result">Running</output><ul id="cases"></ul>
+<script type="module">
+import '/view.js';
+import { PanoProjection } from '/projection.js';
+import { viewFootprint } from '/view-footprint.js';
+const failures = [];
+for (const [projection, layout] of [['360', 'mono'], ['180', 'mono'], ['360', 'sbs'], ['360', 'tb'], ['eac', 'mono']]) {
+  const host = document.createElement('div'); host.className = 'view'; document.body.append(host);
+  const source = document.createElement('canvas'); source.width = 960; source.height = 480;
+  const map = document.createElement('canvas'), grid = document.createElement('canvas');
+  const video = { element: source, readyState: 1, paused: true, currentTime: 0 };
+  let projector;
+  if (projection === 'eac' || layout !== 'mono') {
+    video.displayElement = document.createElement('canvas');
+    projector = new PanoProjection(video.displayElement, source);
+    projector.configure(projection, layout); projector.render(0);
+  }
+  const view = new window.FoaView(host, video, map, { setOrientation() {} }, grid);
+  // Mirror selectView(): restore inactive preferences, then activate, then decode.
+  view.restore({ yaw: .8, pitch: .2, fov: 85 }); view.configure(true, true, projection);
+  const ctx = source.getContext('2d'); ctx.fillStyle = '#00ff00'; ctx.fillRect(0, 0, 960, 480);
+  projector?.render(1); video.readyState = 2;
+  view.thumbnailAt = performance.now(); view.sourceChanged();
+  const pixel = view.thumbContext.getImageData(120, 60, 1, 1).data;
+  const expected = viewFootprint(view.camera.matrixWorld.elements, view.camera.fov, view.camera.aspect, 240, 120);
+  const actual = view.footprint.getContext('2d').getImageData(0, 0, 240, 120).data;
+  const footprintMatches = actual.every((value, index) => value === expected[index]);
+  const passed = pixel[1] > 80 && pixel[0] < 5 && pixel[2] < 5 && footprintMatches;
+  const label = `${projection}/${layout}: ${passed ? 'PASS' : 'FAIL'} first-frame RGB=${Array.from(pixel).slice(0, 3)}; restored footprint=${footprintMatches}`;
+  const item = document.createElement('li'); item.textContent = label; document.getElementById('cases').append(item);
+  if (!passed) failures.push(label);
+  view.dispose(); projector?.dispose(); host.remove();
+}
+document.getElementById('result').textContent = failures.length ? `FAIL: ${failures.length} cases` : 'PASS: all five projections/layouts show the first frame and restored footprint';
+</script></html>

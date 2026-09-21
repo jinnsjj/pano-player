@@ -5,6 +5,20 @@ test('preferences validate persisted or webview values and never retain transien
   assert.deepEqual(normalize(null), defaults);
   assert.equal(defaults.volume, 1);
   assert.equal(defaults.enabled, false);
+  assert.equal(defaults.mapAlgorithm, 'music'); assert.equal(defaults.mapSources, 1);
+  assert.equal(normalize({ mapAlgorithm: 'pwd', mapSources: 2 }).mapAlgorithm, 'pwd');
+  assert.equal(normalize({ mapSources: 2 }).mapSources, 2);
+  for (const mapSources of [0, 3, 1.5, '2', null]) assert.equal(normalize({ mapSources }).mapSources, 1);
+  assert.equal(normalize({ mapAlgorithm: 'mvdr' }).mapAlgorithm, 'music');
+  assert.equal(defaults.meter, false);
+  assert.equal(normalize({ meter: true }).meter, true);
+  assert.equal(normalize({ meter: 'true' }).meter, false);
+  assert.equal(defaults.overview, true);
+  assert.equal(normalize({ overview: false }).overview, false);
+  assert.equal(normalize({ overview: 'false' }).overview, true);
+  assert.equal(defaults.rotation, '0');
+  for (const rotation of ['0', '90', '180', '270']) assert.equal(normalize({ rotation }).rotation, rotation);
+  for (const rotation of ['45', 90, null]) assert.equal(normalize({ rotation }).rotation, '0');
   assert.equal(normalize({ enabled: true }).enabled, true);
   assert.equal(normalize({ volume: .3 }).volume, .3);
   const actual = normalize({ projection: '<script>', listening: 'bypass', volume: 8, opacity: -1,

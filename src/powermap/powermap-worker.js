@@ -1,6 +1,7 @@
 import {
   analyzeFoaWindow,
   createPowermapGeometry,
+  validatePowermapOptions,
 } from './powermap-math.js';
 
 function assertSessionId(sessionId) {
@@ -54,8 +55,7 @@ export function queueAnalysis(state, message) {
     requestId: message.requestId,
     time: message.time,
     reset: Boolean(message.reset),
-    numSources: message.numSources,
-    mapAverage: message.mapAverage,
+    ...validatePowermapOptions(message),
   };
   return replacedRequestId;
 }
@@ -76,7 +76,9 @@ export function processPendingAnalysis(state, sessionId) {
   const request = session?.pending;
   if (!session || !request) return null;
   session.pending = null;
-  if (request.reset) session.previousSpectrum = null;
+  if (request.reset || request.algorithm !== session.algorithm || request.numSources !== session.numSources) {
+    session.previousSpectrum = null;
+  }
   const result = analyzeFoaWindow({
     channels: request.channels,
     geometry: state.geometry,
@@ -84,10 +86,13 @@ export function processPendingAnalysis(state, sessionId) {
     sampleRate: request.sampleRate,
     // AudioWorklet already supplies one complete analysis frame.
     time: 0,
+    algorithm: request.algorithm,
     numSources: request.numSources,
     mapAverage: request.mapAverage,
   });
   session.previousSpectrum = result.spectrum;
+  session.algorithm = request.algorithm;
+  session.numSources = request.numSources;
   return {
     type: 'map',
     sessionId,

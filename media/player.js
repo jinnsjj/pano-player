@@ -1,5 +1,7 @@
 /* global acquireVsCodeApi, lucide */
 import { drawDirectionGrid } from './direction-grid.js';
+import { MeterOverlay } from './meter.js';
+import { FloatingOverlay } from './floating-overlay.js';
 (() => {
   'use strict';
   const api = acquireVsCodeApi();
@@ -10,11 +12,15 @@ import { drawDirectionGrid } from './direction-grid.js';
   let preferences = JSON.parse(video.dataset.preferences);
   const stats = { received: 0, discarded: 0, computeMs: 0, firstFrameMs: null, canPlayMs: null, stalls: 0 };
   const monitor = new window.FoaMonitor(video, processingError, acceptMap);
+  const meters = new MeterOverlay(monitor, enabled => persist({ meter: enabled }));
+  const overview = new FloatingOverlay('overview', enabled => {
+    persist({ overview: enabled }); view?.setOverviewEnabled(enabled && overview.available);
+  });
   let view; let viewMode = 'flat'; let viewLoading;
   let projector; let projectionLoading; let projectionRequest = 0;
   let ready = false; let mappedAt = null; let lastMap; let processingIssue = false;
   let hasVideo = true; let sourceAspect = 2; let mediaDetail = 'Native media';
-  $('projection').disabled = $('layout').disabled = true;
+  $('projection').disabled = $('layout').disabled = $('rotation').disabled = true;
   function level(id) { $(id + '-value').textContent = Math.round(Number($(id).value) * 100) + '%'; }
   function icons() { lucide.createIcons(); }
   function icon(button, name, label) { button.innerHTML = '<i data-lucide="' + name + '" aria-hidden="true"></i>'; button.setAttribute('aria-label', label); button.setAttribute('title', label); icons(); }
@@ -32,16 +38,22 @@ import { drawDirectionGrid } from './direction-grid.js';
     api.setState(preferences);
     api.postMessage({ type: 'preferences', patch });
   }
-  function eyeAspect() { return sourceAspect * ($('layout').value === 'sbs' ? .5 : $('layout').value === 'tb' ? 2 : 1); }
+  function eyeAspect() {
+    const aspect = Number($('rotation').value) % 180 ? 1 / sourceAspect : sourceAspect;
+    return aspect * ($('layout').value === 'sbs' ? .5 : $('layout').value === 'tb' ? 2 : 1);
+  }
   function effectiveProjection() {
     return $('projection').value === 'auto' ? (hasVideo && eyeAspect() >= .9 && eyeAspect() <= 1.1 ? '180' : '360') : $('projection').value;
   }
   function applyPreferences() {
-    for (const id of ['projection', 'layout', 'listening', 'order', 'normalization', 'opacity', 'gridOpacity', 'volume']) $(id).value = preferences[id];
+    for (const id of ['projection', 'layout', 'rotation', 'listening', 'order', 'normalization', 'opacity', 'gridOpacity', 'volume', 'mapAlgorithm', 'mapSources']) $(id).value = preferences[id];
     $('enabled').checked = preferences.enabled;
     $('grid').checked = preferences.grid; updateGrid();
+    meters.setEnabled(preferences.meter);
+    overview.setEnabled(preferences.overview);
     monitor.setMode(preferences.listening); monitor.setOrder(preferences.order);
     monitor.setNormalization(preferences.normalization); monitor.setEnabled(preferences.enabled);
+    monitor.setPowermap(preferences.mapAlgorithm, preferences.mapSources); updateMapControls();
     lastMap = null; clear();
     monitor.setVolume(preferences.volume); monitor.setMuted(preferences.muted);
     icon($('mute'), preferences.muted ? 'volume-x' : 'volume-2', preferences.muted ? 'Unmute' : 'Mute');
@@ -69,6 +81,8 @@ import { drawDirectionGrid } from './direction-grid.js';
     $('projected').hidden = !hasVideo || spatial || !video.displayElement;
     $('direction-grid').hidden = spatial || !$('grid').checked;
     $('reset-view').disabled = !spatial;
+    overview.setAvailable(spatial && !!view);
+    view?.setOverviewEnabled(overview.enabled && overview.available);
     view?.configure(spatial, hasVideo, projection);
   }
   function renderProjection() {
@@ -77,19 +91,19 @@ import { drawDirectionGrid } from './direction-grid.js';
   async function selectProjection() {
     const request = ++projectionRequest;
     try {
-      const transformed = hasVideo && (effectiveProjection() === 'eac' || $('layout').value !== 'mono');
+      const transformed = hasVideo && (effectiveProjection() === 'eac' || $('layout').value !== 'mono' || $('rotation').value !== '0');
       if (transformed && !projector) {
         if (!window.PanoProjection) await (projectionLoading ||= import(new URL('projection.js', video.dataset.view).href));
         if (request !== projectionRequest) return;
         projector = new window.PanoProjection($('projected'), video.element);
       }
       video.displayElement = transformed ? $('projected') : undefined;
-      if (transformed) { projector.configure(effectiveProjection(), $('layout').value); projector.render(video.frames); }
+      if (transformed) { projector.configure(effectiveProjection(), $('layout').value, Number($('rotation').value)); projector.render(video.frames); }
       layoutProjection();
     } catch (error) {
       if (request !== projectionRequest) return;
       projector?.dispose(); projector = undefined; projectionLoading = undefined;
-      video.displayElement = undefined; $('projection').value = '360'; $('layout').value = 'mono';
+      video.displayElement = undefined; $('projection').value = '360'; $('layout').value = 'mono'; $('rotation').value = '0';
       layoutProjection(); $('detail').textContent = 'Projection unavailable: ' + error.message;
       diagnostic('Projection: ' + error.message);
     }
@@ -136,16 +150,19 @@ import { drawDirectionGrid } from './direction-grid.js';
       if ([1, 2].includes(video.channels)) items.push('Bypass');
       else {
         items.push(monitor.order + ' / ' + monitor.normalization, monitor.ready ? monitor.mode : 'initializing spatial audio');
-        items.push('PowerMap' + ($('enabled').checked ? '' : ' off') + ': MUSIC', '1 source', '140 × 70', '140 ms interval');
+        items.push('PowerMap' + ($('enabled').checked ? '' : ' off') + ': ' + preferences.mapAlgorithm.toUpperCase());
+        if (preferences.mapAlgorithm === 'music') items.push(preferences.mapSources + (preferences.mapSources === 1 ? ' source' : ' sources'));
+        items.push('140 × 70', '140 ms interval');
         if (stats.received && $('enabled').checked) items.push(stats.computeMs.toFixed(1) + ' ms DSP');
       }
     }
     const text = items.join(' · ');
     if ($('detail').textContent !== text) $('detail').textContent = text;
   }
-  function tick() {
+  function tick(now) {
     video.render();
     renderProjection();
+    meters.render(now);
     if (!video.paused) { updateClock(); view?.render(); }
     requestAnimationFrame(tick);
   }
@@ -159,7 +176,9 @@ import { drawDirectionGrid } from './direction-grid.js';
     const bypass = [1, 2].includes(video.channels);
     const noAudio = video.channels === 0;
     for (const id of ['enabled', 'opacity', 'order', 'normalization', 'listening']) $(id).disabled = bypass || noAudio;
+    updateMapControls();
     $('volume').disabled = $('mute').disabled = noAudio;
+    meters.setAvailable(!noAudio);
     $('bypass-option').hidden = !bypass;
     $('no-audio-option').hidden = !noAudio;
     if (bypass || noAudio) {
@@ -173,7 +192,7 @@ import { drawDirectionGrid } from './direction-grid.js';
     $('audio-poster').hidden = hasVideo || !bypass;
     $('audio-format').textContent = video.channels === 1 ? 'Mono audio' : 'Stereo audio';
     sourceAspect = hasVideo ? video.videoWidth / video.videoHeight : 2;
-    $('projection').disabled = $('layout').disabled = !hasVideo;
+    $('projection').disabled = $('layout').disabled = $('rotation').disabled = !hasVideo;
     mediaDetail = hasVideo ? video.videoWidth + ' × ' + video.videoHeight : 'Audio';
     updateDetail();
     void selectProjection(); transport();
@@ -221,6 +240,11 @@ import { drawDirectionGrid } from './direction-grid.js';
     }
   });
   $('seek').addEventListener('input', () => { video.currentTime = Number($('seek').value); });
+  for (const id of ['seek', 'volume', 'opacity', 'gridOpacity']) {
+    const slider = $(id);
+    slider.addEventListener('pointerdown', () => { slider.dataset.pointerFocus = ''; });
+    for (const type of ['keydown', 'blur']) slider.addEventListener(type, () => { delete slider.dataset.pointerFocus; });
+  }
   $('volume').addEventListener('input', () => { monitor.setVolume(Number($('volume').value)); level('volume'); persist({ volume: Number($('volume').value) }); });
   $('mute').addEventListener('click', () => {
     monitor.setMuted(!monitor.muted);
@@ -229,9 +253,32 @@ import { drawDirectionGrid } from './direction-grid.js';
   });
   $('listening').addEventListener('change', () => { monitor.setMode($('listening').value); persist({ listening: $('listening').value }); updateDetail(); });
   $('enabled').addEventListener('change', () => { monitor.setEnabled($('enabled').checked); lastMap = null; clear(); persist({ enabled: $('enabled').checked }); updateDetail(); });
+  function updateMapControls() {
+    $('mapAlgorithm').disabled = [0, 1, 2].includes(video.channels);
+    $('mapSources').disabled = $('mapAlgorithm').disabled || $('mapAlgorithm').value !== 'music';
+  }
+  for (const id of ['mapAlgorithm', 'mapSources']) $(id).addEventListener('change', () => {
+    const mapAlgorithm = $('mapAlgorithm').value, mapSources = Number($('mapSources').value);
+    monitor.setPowermap(mapAlgorithm, mapSources); lastMap = null; clear();
+    persist({ mapAlgorithm, mapSources }); updateMapControls(); updateDetail();
+  });
+  const menus = [$('grid-settings'), $('powermap-settings')];
+  for (const menu of menus) menu.addEventListener('toggle', () => {
+    if (menu.open) for (const other of menus) if (other !== menu) other.open = false;
+  });
+  window.addEventListener('click', event => {
+    for (const menu of menus) if (!menu.contains(event.target)) menu.open = false;
+  });
+  window.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    for (const menu of menus) if (menu.open) {
+      menu.open = false; menu.querySelector('summary').focus(); event.preventDefault();
+    }
+  });
   $('opacity').addEventListener('input', () => { level('opacity'); persist({ opacity: Number($('opacity').value) }); draw(); });
   $('projection').addEventListener('change', () => { persist({ projection: $('projection').value }); void selectProjection(); });
   $('layout').addEventListener('change', () => { persist({ layout: $('layout').value }); void selectProjection(); });
+  $('rotation').addEventListener('change', () => { persist({ rotation: $('rotation').value }); void selectProjection(); });
   $('grid').addEventListener('change', () => { persist({ grid: $('grid').checked }); updateGrid(); });
   $('gridOpacity').addEventListener('input', () => { level('gridOpacity'); persist({ gridOpacity: Number($('gridOpacity').value) }); updateGrid(); });
   async function selectView(mode) {
@@ -240,7 +287,7 @@ import { drawDirectionGrid } from './direction-grid.js';
       if (mode === 'spatial' && !view) {
         if (!window.FoaView) await (viewLoading ||= import(video.dataset.view));
         if (viewMode !== 'spatial') return;
-        view = new window.FoaView($('spatial'), video, canvas, monitor, $('direction-grid'));
+        view = new window.FoaView($('spatial'), video, canvas, monitor, $('direction-grid'), $('overview-content'));
         view.setGridEnabled($('grid').checked);
         view.restore(preferences);
         view.onChange = camera => persist(camera);
