@@ -5,7 +5,7 @@ const { buildSync } = require('esbuild');
 function monitor(globals = {}) {
   const module = { exports: {} };
   const built = buildSync({ entryPoints: [require.resolve('../src/browser-monitor.js')], bundle: true, write: false, format: 'cjs', logLevel: 'silent' });
-  vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports, AbortController, performance, console, URL, ...globals });
+  vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports, AbortController, performance, console, URL, Float32Array, ...globals });
   const video = { paused: false, seeking: false, readyState: 4, currentTime: 2, listeners: {},
     addEventListener(type, fn) { this.listeners[type] = fn; } };
   const errors = [], maps = [];
@@ -14,9 +14,8 @@ function monitor(globals = {}) {
 }
 test('mono/stereo attach straight to gain without initializing FOA DSP and remain camera-independent', async () => {
   for (const channels of [1, 2]) {
-    const gain = { gain: {}, connect() {} };
     const { m, video, errors } = monitor({ AudioContext: class {
-      createGain() { return gain; }
+      createGain() { return { gain: {}, connections: [], connect(node) { this.connections.push(node); } }; }
       async resume() {} async suspend() {}
     } });
     video.metadata = Promise.resolve(); video.channels = channels;
@@ -24,7 +23,12 @@ test('mono/stereo attach straight to gain without initializing FOA DSP and remai
     video.attach = async (context, destination) => { attached = destination; video.node = {}; };
     await m.prepare();
     assert.deepEqual(errors, []);
+    const gain = m.fallback;
     assert.equal(attached, gain);
+    assert.ok(gain.connections.includes(m.meterInput));
+    assert.equal(m.meterInput.channelCount, 2);
+    assert.equal(m.meterInput.channelCountMode, 'explicit');
+    assert.equal(m.meterNode, undefined, 'A closed overlay must not load the meter worklet');
     assert.equal(m.getState().mode, 'bypass');
     assert.equal(m.getState().channels, channels);
     assert.equal(m.renderer, undefined); assert.equal(m.capture, undefined); assert.equal(m.service, undefined);
@@ -36,6 +40,26 @@ test('mono/stereo attach straight to gain without initializing FOA DSP and remai
     m.setMuted(false); assert.equal(gain.gain.value, .4);
     assert.equal(video.currentTime, 2); assert.equal(video.paused, false);
   }
+});
+test('meter statistics reset on discontinuities, not gain changes, and disable when closed', () => {
+  const { m, video } = monitor();
+  const messages = []; let preparations = 0;
+  m.prepareMeter = () => { preparations++; };
+  m.context = { state: 'running', resume: async () => {} };
+  m.meterNode = { port: { postMessage: value => messages.push(value) } };
+  m.setMeterEnabled(true);
+  assert.equal(preparations, 1); assert.equal(messages.at(-1).enabled, true);
+  const data = { duration: 5 }; m.meterData = data;
+  m.setVolume(.5); m.setMuted(true);
+  assert.equal(m.getMeterState().data, data, 'Historical maxima survive volume/mute changes');
+  video.paused = true; assert.equal(m.getMeterState().active, false); video.paused = false;
+  for (const reset of [() => video.listeners.seeking(), () => video.listeners.play(),
+    () => m.setMode('stereo'), () => m.setOrder('WXYZ'), () => m.setNormalization('N3D')]) {
+    m.meterData = data; const epoch = m.meterEpoch; reset();
+    assert.equal(m.meterData, null); assert.equal(m.meterEpoch, epoch + 1);
+  }
+  m.setMeterEnabled(false);
+  assert.equal(messages.at(-1).enabled, false); assert.equal(m.meterData, null);
 });
 test('normalization changes reset stale frames without reopening media', async () => {
   const { m, video } = monitor();
@@ -52,6 +76,26 @@ test('normalization changes reset stale frames without reopening media', async (
   m.setNormalization('FuMa');
   assert.equal(m.normalization, 'N3D');
   assert.equal(m.generation, 1);
+});
+test('PowerMap changes forward the method/source count and discard old results without resetting audio meters', async () => {
+  const { m, video, maps } = monitor();
+  const requests = []; let finish;
+  m.context = { sampleRate: 48000 };
+  m.service = { reset() {}, requestMap(session, time, options) {
+    requests.push(options); return new Promise(resolve => { finish = resolve; });
+  } };
+  m.setEnabled(true); m.meterData = { duration: 3 };
+  const before = m.generation;
+  m.setPowermap('invalid', 1); m.setPowermap('music', 3);
+  assert.equal(m.generation, before);
+  const pending = m.frame({ type: 'frame', epoch: m.generation, channels: [] });
+  assert.equal(requests.at(-1).algorithm, 'music'); assert.equal(requests.at(-1).numSources, 1);
+  m.setPowermap('pwd', 2); finish({ map: new Float32Array(9800) }); await pending;
+  assert.equal(maps.length, 0);
+  const next = m.frame({ type: 'frame', epoch: m.generation, channels: [] });
+  assert.equal(requests.at(-1).algorithm, 'pwd'); assert.equal(requests.at(-1).numSources, 2);
+  finish({ map: new Float32Array(9800) }); await next; assert.equal(maps.length, 1);
+  assert.equal(m.meterData.duration, 3); assert.equal(video.currentTime, 2); assert.equal(video.paused, false);
 });
 test('video without audio never initializes AudioContext, worklets or spatial DSP', async () => {
   let contexts = 0;

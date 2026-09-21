@@ -2,7 +2,7 @@
   "name": "pano-player",
   "displayName": "PanoPlayer",
   "description": "Play ERP and EAC panoramas, mono or stereo video, with spatial FOA audio and live PowerMap overlays.",
-  "version": "0.4.17",
+  "version": "0.4.26",
   "icon": "media/icon.png",
   "publisher": "shijunjie",
   "author": "Junjie Shi",
@@ -46,7 +46,8 @@
     "build": "node build.cjs",
     "test": "node build.cjs && node --test tests/*.test.cjs",
     "vscode:prepublish": "node build.cjs",
-    "package": "npx @vscode/vsce package --no-dependencies --githubBranch main"
+    "prepackage": "node -e \"require('node:fs').mkdirSync('output', { recursive: true })\"",
+    "package": "npx @vscode/vsce package --no-dependencies --githubBranch main --out output"
   },
   "contributes": {
     "commands": [
@@ -73,6 +74,12 @@
             "filenamePattern": "*.WAV"
           },
           {
+            "filenamePattern": "*.flac"
+          },
+          {
+            "filenamePattern": "*.FLAC"
+          },
+          {
             "filenamePattern": "*.mov"
           },
           {
@@ -92,7 +99,7 @@
       "explorer/context": [
         {
           "command": "panoPlayer.open",
-          "when": "(resourceScheme == file || resourceScheme == vscode-remote) && resourceExtname =~ /\\.(mp4|webm|wav|mov|mkv)$/i",
+          "when": "(resourceScheme == file || resourceScheme == vscode-remote) && resourceExtname =~ /\\.(mp4|webm|wav|flac|mov|mkv)$/i",
           "group": "navigation"
         }
       ]

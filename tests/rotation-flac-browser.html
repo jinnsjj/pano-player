@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Rotation and FLAC regression</title>
+<h1>Rotation and FLAC regression</h1><pre id="result">Running</pre>
+<script src="/stream-player.js"></script>
+<script type="module">
+import { PanoProjection } from '/projection.js';
+const results = [], output = document.getElementById('result');
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+try {
+  const source = document.createElement('canvas'); source.width = 160; source.height = 80;
+  const ctx = source.getContext('2d');
+  for (const [x, y, color] of [[0, 0, 'red'], [80, 0, 'lime'], [0, 40, 'blue'], [80, 40, 'yellow']]) {
+    ctx.fillStyle = color; ctx.fillRect(x, y, 80, 40);
+  }
+  const actual = document.createElement('canvas'), rotated = document.createElement('canvas');
+  const reference = document.createElement('canvas'), readback = document.createElement('canvas');
+  const projector = new PanoProjection(actual, source);
+  for (const rotation of [0, 90, 180, 270]) for (const layout of ['mono', 'sbs', 'tb']) {
+    rotated.width = rotation % 180 ? source.height : source.width;
+    rotated.height = rotation % 180 ? source.width : source.height;
+    const draw = rotated.getContext('2d'); draw.translate(rotated.width / 2, rotated.height / 2);
+    draw.rotate(rotation * Math.PI / 180); draw.drawImage(source, -source.width / 2, -source.height / 2);
+    for (const projection of ['360', '180', 'eac']) {
+      const expected = new PanoProjection(reference, rotated);
+      expected.configure(projection, layout); expected.render(1);
+      projector.configure(projection, layout, rotation); projector.render(1);
+      assert(actual.width === reference.width && actual.height === reference.height, 'Rotated dimensions');
+      readback.width = actual.width; readback.height = actual.height;
+      const read = readback.getContext('2d'); read.drawImage(actual, 0, 0);
+      const a = read.getImageData(0, 0, actual.width, actual.height).data;
+      read.drawImage(reference, 0, 0); const b = read.getImageData(0, 0, actual.width, actual.height).data;
+      const error = a.reduce((sum, value, i) => sum + Math.abs(value - b[i]), 0) / a.length;
+      assert(error < .1, `${projection}/${layout}/${rotation}: pixel error ${error}`);
+      expected.dispose();
+    }
+  }
+  projector.dispose(); results.push('PASS: 36 rotation/projection/layout pixel comparisons');
+  output.textContent = results.join('\n');
+  // Serve 1/2/4-channel, 48 kHz, s16 FLAC tones at /source/0..2 (220 Hz * channel).
+  for (const [index, channels] of [1, 2, 4].entries()) {
+    const canvas = document.createElement('canvas');
+    Object.assign(canvas.dataset, { source: location.origin + '/source/' + index,
+      decoder: location.origin + '/stream-worker.js' });
+    const player = new window.StreamPlayer(canvas); player.refill = () => {};
+    try {
+      await player.metadata;
+      assert(player.channels === channels && player.sampleRate === 48000 && player.videoWidth === 0, 'FLAC metadata');
+      for (const time of [0, .7, 5.9]) {
+        await player.seek(time);
+        const chunk = await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('FLAC decode timeout')), 10000);
+          player.addEventListener('error', () => { clearTimeout(timer); reject(player.error); }, { once: true });
+          player.node = { disconnect() {}, port: { postMessage(data) {
+            if (data.type === 'chunk') { clearTimeout(timer); resolve(data.channels); }
+          } } };
+          player.worker.postMessage({ type: 'audio', epoch: player.epoch });
+        });
+        assert(chunk.length === channels && chunk[0].length > 0 && chunk[0].length <= 19200, 'Bounded FLAC chunk');
+        for (let ch = 0; ch < channels; ch++) for (let i = 0; i < chunk[ch].length; i++) {
+          const expected = .1 * Math.sin(2 * Math.PI * 220 * (ch + 1) * (Math.round(time * 48000) + i) / 48000);
+          assert(Math.abs(chunk[ch][i] - expected) < 1 / 32768, `FLAC channel ${ch}, seek ${time}, sample ${i}`);
+        }
+        if (time === 5.9) assert(player.eof && chunk[0].length === 4800, 'FLAC EOF');
+      }
+      results.push(`PASS: FLAC ${channels}ch PCM, bounded streaming, seek and EOF`);
+      output.textContent = results.join('\n');
+    } finally { player.dispose(); }
+  }
+} catch (error) { output.textContent = results.concat('FAIL: ' + error.stack).join('\n'); }
+</script></html>

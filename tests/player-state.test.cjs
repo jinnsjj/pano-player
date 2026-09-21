@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const { buildSync } = require('esbuild');
 const { defaults, normalize } = require('../src/preferences.cjs');
 function setup(saved = {}) {
-  let persisted, onMap, onError;
+  let persisted, onMap, onError, frame;
   const elements = new Map(), messages = [], listeners = {};
   const get = id => {
     if (!elements.has(id)) elements.set(id, {
@@ -13,12 +13,15 @@ function setup(saved = {}) {
       listeners: {}, addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
       fire(type) { for (const fn of this.listeners[type] || []) fn(); },
       width: 2048, height: 1024,
-      getContext: () => ({ clearRect() {}, putImageData() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, strokeText() {}, fillText() {} }), setAttribute() {}, removeAttribute() {}, load() {},
+      getContext: () => ({ clearRect() {}, putImageData() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, strokeText() {}, fillText() {} }),
+      attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, load() {}, render() {},
+      querySelectorAll() { return []; }, focus() {},
+      getBoundingClientRect() { return { x: 100, y: 76, width: 240, height: 148 }; },
       pause() { this.paused = true; }, play() { this.paused = false; return Promise.resolve(); },
     });
     return elements.get(id);
   };
-  const window = { addEventListener(type, fn) { listeners[type] = fn; } };
+  const window = { innerWidth: 1280, innerHeight: 800, addEventListener(type, fn) { listeners[type] = fn; } };
   window.StreamPlayer = class { constructor(element) { return element; } };
   window.FoaMonitor = class {
     generation = 0; ready = false;
@@ -29,26 +32,65 @@ function setup(saved = {}) {
     setOrder(order) { this.order = order; this.reset(); }
     setNormalization(value) { this.normalization = value; this.reset(); }
     setEnabled(value) { this.enabled = value; this.reset(); }
+    setPowermap(algorithm, sources) { this.mapAlgorithm = algorithm; this.mapSources = sources; this.reset(); }
     setVolume(value) { this.volume = value; } setMode(value) { this.mode = value; }
     setMuted(value) { this.muted = value; } dispose() {} getState() { return { ready: false, mode: this.mode, volume: this.volume, muted: this.muted }; }
+    setMeterEnabled(enabled) { this.meterEnabled = enabled; }
+    resetMeter() { this.meterData = null; }
+    getMeterState() { return { data: this.meterData, active: true, status: 'ready' }; }
   };
   window.FoaView = class {
     setGridEnabled(enabled) { this.grid = enabled; }
+    setOverviewEnabled(enabled) { this.overview = enabled; }
     configure(active) { this.active = active; } mapChanged() {} sourceChanged() {} render() {} dispose() {} reset() {}
     restore({ yaw, pitch, fov }) { this.camera = { yaw, pitch, fov }; }
-    getState() { return { active: this.active, grid: this.grid, ...this.camera }; }
+    getState() { return { active: this.active, grid: this.grid, overview: this.overview, ...this.camera }; }
   };
   window.PanoProjection = class {
-    configure(projection, layout) { get('projected').configuration = { projection, layout }; }
+    configure(projection, layout, rotation) { get('projected').configuration = { projection, layout, rotation }; }
     render() { return false; } dispose() {}
   };
   vm.runInNewContext(buildSync({ entryPoints: [require.resolve('../media/player.js')], bundle: true, write: false }).outputFiles[0].text, {
     window, document: { getElementById: get }, performance,
     acquireVsCodeApi: () => ({ getState: () => saved, setState(value) { persisted = value; }, postMessage: m => messages.push(m) }),
-    lucide: { createIcons() {} }, requestAnimationFrame() {}, Uint8ClampedArray, ImageData: class {},
+    lucide: { createIcons() {} }, requestAnimationFrame(fn) { frame = fn; }, Uint8ClampedArray, ImageData: class {},
   });
-  return { get, messages, onMap, onError, persisted: () => persisted, state: () => window.__PANO_PLAYER__.getState() };
+  return { get, messages, onMap, onError, tick: now => frame(now), monitor: window.__PANO_PLAYER__.monitor,
+    persisted: () => persisted, state: () => window.__PANO_PLAYER__.getState() };
 }
+test('meter overlay independently persists, closes, resets, and displays held peaks separately from RMS', () => {
+  const s = setup();
+  assert.equal(s.get('meter-overlay').hidden, true);
+  assert.equal(s.monitor.meterEnabled, false);
+  s.get('meter').checked = true; s.get('meter').fire('change');
+  assert.equal(s.persisted().meter, true); assert.equal(s.get('meter-overlay').hidden, false);
+  s.monitor.meterData = { duration: 5, channels: [{ peak: -24, heldPeak: -6, truePeak: -23, heldTruePeak: 1, clips: 0, trueClips: 3 },
+    { peak: -24, heldPeak: -6, truePeak: -23, heldTruePeak: -5, clips: 0, trueClips: 0 }],
+    rmsMomentary: -30, rmsIntegrated: -32, lufsMomentary: -29, lufsShort: -28, lufsIntegrated: -31,
+    lra: 4, lraLow: -32, lraHigh: -28 };
+  s.tick(0);
+  assert.equal(s.get('meter-peak-0-value').textContent, '-24.0');
+  assert.equal(s.get('meter-peak-0-max').textContent, '-6.0');
+  assert.equal(s.get('meter-rms-m-value').textContent, '-30.0');
+  assert.equal(s.get('meter-true-0').dataset.clipping, 'true');
+  assert.equal(s.get('meter-true-0-clips').textContent, '3');
+  assert.equal(s.get('meter-true-0-value').title, '-23.0 dBTP, maximum 1.0 dBTP, 3 clipped samples');
+  assert.equal(s.get('meter-lra-value').textContent, '4.0');
+  assert.ok(parseFloat(s.get('meter-peak-0').style['--peak']) > parseFloat(s.get('meter-peak-0').style['--level']));
+  s.get('meter-reset').fire('click'); s.tick(50);
+  assert.equal(s.get('meter-peak-0-hold').hidden, true);
+  assert.equal(s.get('meter-rms-m-value').textContent, '--');
+  assert.equal(s.get('video').paused, true);
+  s.get('video').channels = 0; s.get('video').fire('loadedmetadata');
+  assert.equal(s.get('meter-overlay').hidden, true); assert.equal(s.get('meter').disabled, true);
+  assert.equal(s.persisted().meter, true);
+  s.get('video').channels = 2; s.get('video').fire('loadedmetadata');
+  assert.equal(s.get('meter-overlay').hidden, false);
+  s.get('meter-close').fire('click');
+  assert.equal(s.get('meter-overlay').hidden, true); assert.equal(s.persisted().meter, false);
+  assert.equal(s.monitor.meterEnabled, false);
+  assert.equal(setup({ meter: true }).get('meter-overlay').hidden, false);
+});
 test('native controls and playback do not await a stalled DSP initializer', () => {
   const s = setup(), video = s.get('video');
   assert.equal(s.state().ready, true); assert.equal(s.state().listening.ready, false);
@@ -58,6 +100,46 @@ test('native controls and playback do not await a stalled DSP initializer', () =
   assert.equal(video.paused, false); assert.equal(s.get('empty').hidden, true);
   assert.match(s.get('detail').textContent, /Worker unavailable/);
   assert.ok(s.messages.every(message => message.type === 'diagnostic'));
+});
+test('all sliders suppress pointer focus rings and restore keyboard focus without blurring', () => {
+  const s = setup();
+  for (const id of ['seek', 'volume', 'opacity', 'gridOpacity']) {
+    const slider = s.get(id);
+    slider.blur = () => { throw new Error('Pointer interaction must retain slider focus'); };
+    slider.fire('pointerdown'); assert.equal(slider.dataset.pointerFocus, '');
+    slider.fire('keydown'); assert.equal(slider.dataset.pointerFocus, undefined);
+    slider.fire('pointerdown'); slider.fire('blur');
+    assert.equal(slider.dataset.pointerFocus, undefined);
+  }
+});
+test('panorama overview is an independent persisted overlay available in Perspective', () => {
+  const s = setup({ meter: true });
+  assert.equal(s.get('overview').checked, true);
+  assert.equal(s.get('overview').disabled, true);
+  assert.equal(s.get('overview-overlay').hidden, true);
+  s.get('view-spatial').fire('click');
+  assert.equal(s.get('overview').disabled, false);
+  assert.equal(s.get('overview-overlay').hidden, false);
+  assert.equal(s.state().view.overview, true);
+  s.get('overview-close').fire('click');
+  assert.equal(s.persisted().overview, false);
+  assert.equal(s.get('overview').checked, false);
+  assert.equal(s.state().view.overview, false);
+  assert.equal(s.get('meter-overlay').hidden, false);
+  assert.equal(setup(s.persisted()).get('overview-overlay').hidden, true);
+  s.get('overview').checked = true; s.get('overview').fire('change');
+  assert.equal(s.get('overview-overlay').hidden, false);
+  s.get('view-flat').fire('click');
+  assert.equal(s.get('overview-overlay').hidden, true);
+  assert.equal(s.persisted().overview, true, 'View switches must not erase the toggle');
+  s.get('view-spatial').fire('click');
+  assert.equal(s.get('overview-overlay').hidden, false);
+  const restored = setup(s.persisted());
+  assert.equal(restored.get('overview-overlay').hidden, false);
+  assert.equal(restored.state().view.overview, true);
+  s.get('reset-settings').fire('click');
+  assert.equal(s.get('overview').checked, true);
+  assert.equal(s.get('overview-overlay').hidden, true, 'Default view is Panorama');
 });
 test('direction grid is independent of audio and PowerMap, remembered and reset in both views', () => {
   const s = setup(), video = s.get('video');
@@ -142,6 +224,31 @@ test('grid and PowerMap have independent persisted opacities and toggles', () =>
   assert.equal(next.get('gridOpacity-value').textContent, '100%');
   assert.equal(next.get('opacity-value').textContent, '75%');
 });
+test('PowerMap method and MUSIC source count persist, reset stale maps, and keep playback and bypass settings', () => {
+  const s = setup({ enabled: true }), video = s.get('video');
+  video.channels = 4; video.paused = false; video.currentTime = 4; video.fire('loadedmetadata');
+  const map = { generation: s.state().generation, time: 4, rgba: new Uint8ClampedArray(39200), computeMs: 1 };
+  s.onMap(map);
+  s.get('mapSources').value = '2'; s.get('mapSources').fire('change');
+  assert.equal(s.monitor.mapSources, 2); assert.match(s.get('detail').textContent, /MUSIC.*2 sources/);
+  assert.equal(s.state().mappedAt, null); s.onMap(map); assert.equal(s.state().received, 1);
+  s.get('mapAlgorithm').value = 'pwd'; s.get('mapAlgorithm').fire('change');
+  assert.equal(s.monitor.mapAlgorithm, 'pwd'); assert.equal(s.get('mapSources').disabled, true);
+  assert.match(s.get('detail').textContent, /PWD/); assert.doesNotMatch(s.get('detail').textContent, /sources/);
+  assert.equal(setup(s.persisted()).get('mapAlgorithm').value, 'pwd');
+  s.get('mapAlgorithm').value = 'music'; s.get('mapAlgorithm').fire('change');
+  assert.equal(s.get('mapSources').disabled, false); assert.equal(s.persisted().mapSources, 2);
+  for (const channels of [0, 1, 2]) {
+    video.channels = channels; video.fire('loadedmetadata');
+    assert.equal(s.get('mapAlgorithm').disabled, true); assert.equal(s.get('mapSources').disabled, true);
+    assert.equal(s.persisted().mapSources, 2); assert.equal(s.persisted().enabled, true);
+  }
+  video.channels = 4; video.fire('loadedmetadata');
+  assert.equal(s.get('mapSources').disabled, false); assert.equal(s.get('enabled').checked, true);
+  assert.equal(video.currentTime, 4); assert.equal(video.paused, false);
+  s.get('reset-settings').fire('click');
+  assert.equal(s.monitor.mapAlgorithm, 'music'); assert.equal(s.monitor.mapSources, 1);
+});
 test('footer combines source dimensions, channels, source sample rate and PowerMap parameters', () => {
   const s = setup(), v = s.get('video');
   v.channels = 4; v.sampleRate = 44100; v.fire('loadedmetadata');
@@ -183,7 +290,7 @@ test('EAC and single-eye ERP layouts preserve audio clock, full overlay and Spat
   ]) {
     video.videoWidth = width; video.videoHeight = height; video.fire('loadedmetadata');
     s.get('projection').value = projection; s.get('layout').value = layout; s.get('layout').fire('change');
-    assert.deepEqual(s.get('projected').configuration, { projection, layout });
+    assert.deepEqual(s.get('projected').configuration, { projection, layout, rotation: 0 });
     assert.equal(s.get('stage').style['--video-aspect'], String(aspect));
     assert.equal(video.hidden, true); assert.equal(s.get('projected').hidden, false);
     assert.equal(s.get('overlay').hidden, false);
@@ -210,6 +317,34 @@ test('seek, order change and overlay disable reject stale maps without reopening
   s.get('enabled').checked = false; s.get('enabled').fire('change');
   s.onMap({ ...map, generation: s.state().generation, time: 4 });
   assert.equal(s.state().mappedAt, null);
+});
+test('source rotation changes aspect before eye selection, persists and resets without touching audio or time', () => {
+  const s = setup(), video = s.get('video');
+  video.currentTime = 4; video.paused = false;
+  const generation = s.state().generation;
+  for (const rotation of ['90', '180', '270', '0']) {
+    s.get('rotation').value = rotation; s.get('rotation').fire('change');
+    assert.equal(s.persisted().rotation, rotation);
+    assert.equal(s.get('stage').style['--video-aspect'], Number(rotation) % 180 ? '0.5' : '2');
+    assert.equal(!!video.displayElement, rotation !== '0');
+    if (rotation !== '0') assert.equal(s.get('projected').configuration.rotation, Number(rotation));
+    assert.equal(video.currentTime, 4); assert.equal(video.paused, false);
+    assert.equal(s.state().generation, generation);
+  }
+  s.get('rotation').value = '90'; s.get('rotation').fire('change');
+  video.videoWidth = 480; video.videoHeight = 960; video.fire('loadedmetadata');
+  s.get('layout').value = 'sbs'; s.get('layout').fire('change');
+  assert.equal(s.state().projection, '180');
+  s.get('view-spatial').fire('click');
+  const next = setup(s.persisted());
+  assert.equal(next.get('rotation').value, '90');
+  assert.equal(next.state().view.active, true);
+  next.get('video').videoWidth = next.get('video').videoHeight = 0;
+  next.get('video').fire('loadedmetadata');
+  assert.equal(next.get('rotation').disabled, true);
+  assert.equal(next.state().preferences.rotation, '90');
+  next.get('reset-settings').fire('click');
+  assert.equal(next.get('rotation').value, '0');
 });
 test('all preferences restore across media and resetting defaults preserves the playback clock', () => {
   const chosen = { projection: '180', layout: 'tb', view: 'spatial', listening: 'stereo', order: 'WXYZ',

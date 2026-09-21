@@ -1,5 +1,27 @@
 # Third-Party Notices
 
+## Loudness Meters
+
+`src/loudness-meter.js` adapts the DSP of Cockos' `analysis/loudness_meter` from the
+locally installed REAPER 7.52. Copyright (C) 2021 and later Cockos Incorporated.
+The original declares LGPL without a version; this adaptation is distributed
+under LGPL-2.1-or-later. The full license is in `media/LICENSE-loudness-meter.txt`.
+The original JSFX is retained in `meter-sources/loudness_meter`.
+
+The JavaScript adaptation and AudioWorklet adapter are shipped as source in
+`src/loudness-meter.js` and `src/level-meter-processor.js`. The separately loaded
+bundle is `media/level-meter-processor.js`. From the source checkout, rebuild with
+`npm ci && npm run build`. The sources shipped inside an extracted VSIX can also
+be rebuilt independently, using Node.js and esbuild 0.28.2:
+
+```sh
+npx --package=esbuild@0.28.2 esbuild src/level-meter-processor.js --bundle --format=iife --platform=browser --target=chrome114 --minify --legal-comments=inline --outfile=media/level-meter-processor.js
+```
+
+Changes include stereo-only output analysis, simultaneous sample/true peak
+measurement, an AudioWorklet message interface, and a DOM-based overlay instead
+of the JSFX user interface. No REAPER executable is bundled or required.
+
 ## PowerMap Analyzer
 
 `python/foa_music_powermap.py` is an unchanged copy of the locally installed

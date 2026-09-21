@@ -17,9 +17,14 @@ test('stream player closes stale frames, preserves seek epochs and bounds PCM pr
   const messages = [];
   player.worker = { postMessage: data => messages.push(data) };
   player.node = { port: { postMessage: data => messages.push(data) } };
-  player.receive({ type: 'metadata', epoch: 0, sampleRate: 48000, width: 640, height: 640, duration: 20 });
+  let loadedState, canPlay = 0;
+  player.addEventListener('loadeddata', () => { loadedState = player.readyState; });
+  player.addEventListener('canplay', () => { canPlay++; });
+  player.receive({ type: 'metadata', epoch: 0, channels: 4, sampleRate: 48000, width: 640, height: 640, duration: 20 });
   player.receive({ type: 'video', epoch: 0, time: 8, frame: { close() { closed++; } } });
   assert.equal(drawn, 1, 'Show the first source frame while waiting for its presentation timestamp');
+  assert.equal(loadedState, 2, 'Thumbnail consumers must see decoded video before audio becomes ready');
+  assert.equal(canPlay, 0, 'Video readiness must not claim audio is ready');
   await player.seek(10);
   player.receive({ type: 'video', epoch: 0, time: 1, frame: { close() { closed++; } } });
   assert.equal(closed, 2); assert.equal(drawn, 1); assert.equal(player.currentTime, 10);

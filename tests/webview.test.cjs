@@ -49,7 +49,26 @@ test('review UI keeps direct view tabs, labeled setting groups and accessible tr
   for (const label of ['Grid opacity', 'PowerMap opacity']) assert.ok(html.includes('aria-label="' + label + '"'));
   assert.equal((settings.match(/class="overlay-control"/g) || []).length, 2);
   assert.equal((settings.match(/class="overlay-opacity"/g) || []).length, 2);
+  for (const [id, label, input] of [['grid', 'Grid', 'gridOpacity'], ['powermap', 'PowerMap', 'opacity']]) {
+    const menu = settings.match(new RegExp(`<details id="${id}-settings"[\\s\\S]*?</details>`))[0];
+    assert.doesNotMatch(menu, /<details[^>]*\bopen\b/);
+    assert.ok(menu.includes(`aria-label="${label} settings"`));
+    assert.ok(menu.includes(`id="${input}"`));
+  }
+  assert.match(settings, /id="mapAlgorithm" aria-label="PowerMap algorithm"/);
+  assert.match(settings, /id="mapSources" aria-label="MUSIC sources"/);
   for (const id of ['volume-value', 'opacity-value', 'gridOpacity-value']) assert.match(html, new RegExp('id="' + id + '" aria-hidden="true"'));
+  assert.match(settings, /id="meter" type="checkbox" aria-controls="meter-overlay"/);
+  assert.match(settings, /id="overview" type="checkbox" aria-controls="overview-overlay"/);
+  assert.match(html, /id="overview-overlay" role="dialog" aria-labelledby="overview-heading" tabindex="-1" hidden/);
+  assert.match(html, /aria-label="Close PanoView"/);
+  assert.match(settings, /<span>PanoView<\/span>/);
+  assert.match(html, /id="meter-overlay" role="dialog" aria-labelledby="meter-heading" tabindex="-1" hidden/);
+  for (const label of ['L sample peak', 'R true peak', 'RMS integrated', 'LUFS integrated, gated', 'Loudness range']) {
+    assert.ok(html.includes('aria-label="' + label + '"'));
+  }
+  assert.match(html, /aria-label="Reset all meter statistics"/);
+  assert.match(html, /aria-label="Close meters"/);
 });
 test('all webview icons are included in the selective Lucide registry', () => {
   const source = require('node:fs').readFileSync(require.resolve('../src/icons.js'), 'utf8');
@@ -84,9 +103,9 @@ test('WAV is registered in the editor selector and open command', () => {
   assert.equal(manifest.contributes.customEditors[0].displayName, 'PanoPlayer');
   assert.match(renderHtml({ title: 'review.webm' }), /<title>review.webm - PanoPlayer<\/title>/);
 });
-test('MOV and MKV are offered by the editor, context menu and file picker', () => {
+test('MOV, MKV and FLAC are offered by the editor, context menu and file picker', () => {
   const extension = require('node:fs').readFileSync(require.resolve('../src/extension.cjs'), 'utf8');
-  for (const ext of ['mov', 'mkv']) {
+  for (const ext of ['mov', 'mkv', 'flac']) {
     for (const spelling of [ext, ext.toUpperCase()]) {
       assert.ok(manifest.contributes.customEditors[0].selector.some(s => s.filenamePattern === '*.' + spelling));
     }
@@ -108,7 +127,7 @@ test('feature overview packages with GitHub HTTPS image rewriting', () => {
   assert.doesNotMatch(source, /\p{Script=Han}/u);
   assert.doesNotMatch(source, /data:image\//);
   assert.doesNotMatch(source, /作者：|Junjie Shi|Junjie SHI/);
-  for (const name of ['panorama', 'spatial', 'wav']) {
+  for (const name of ['panorama', 'spatial', 'wav', 'sample-erp', 'sample-eac', 'erp-perspective', 'eac-perspective']) {
     const file = `docs/images/${name}.jpg`;
     assert.ok(source.includes(`(${file})`));
     const image = fs.readFileSync(path.join(__dirname, '..', file));
@@ -116,6 +135,7 @@ test('feature overview packages with GitHub HTTPS image rewriting', () => {
   }
   assert.equal(manifest.repository.url, 'https://github.com/jinnsjj/pano-player.git');
   assert.match(manifest.scripts.package, /--githubBranch main/);
+  assert.match(manifest.scripts.package, /--out output(?:\s|$)/);
   assert.doesNotMatch(manifest.scripts.package, /--no-rewrite-relative-links|--readme-path/);
   assert.doesNotMatch(read('build.cjs'), /data:image\//);
 });

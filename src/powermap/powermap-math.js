@@ -313,16 +313,20 @@ export function normalizeMap(values) {
 }
 
 export function validatePowermapOptions({
+  algorithm = 'music',
   mapAverage = MAP_AVERAGE,
   numSources = 1,
 } = {}) {
+  if (algorithm !== 'music' && algorithm !== 'pwd') {
+    throw new RangeError('PowerMap algorithm must be MUSIC or PWD');
+  }
   if (numSources !== 1 && numSources !== 2) {
     throw new RangeError('First-order MUSIC supports one or two sources');
   }
   if (!Number.isFinite(mapAverage) || mapAverage < 0 || mapAverage >= 1) {
     throw new RangeError('PowerMap average must be in [0, 1)');
   }
-  return { mapAverage, numSources };
+  return { algorithm, mapAverage, numSources };
 }
 
 export function analyzeFoaWindow({
@@ -330,12 +334,13 @@ export function analyzeFoaWindow({
   sampleRate,
   time,
   geometry,
+  algorithm = 'music',
   mapAverage = MAP_AVERAGE,
   numSources = 1,
   previousSpectrum = null,
 }) {
   assertFourEqualChannels(channels);
-  const options = validatePowermapOptions({ mapAverage, numSources });
+  const options = validatePowermapOptions({ algorithm, mapAverage, numSources });
   if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
     throw new RangeError('sampleRate must be positive');
   }
@@ -384,7 +389,18 @@ export function analyzeFoaWindow({
 
   const rawSpectrum = new Float64Array(scanSize);
   const trace = covariance[0] + covariance[5] + covariance[10] + covariance[15];
-  if (trace > 1e-12) {
+  if (trace > 1e-12 && options.algorithm === 'pwd') {
+    // PWD beam energy Y^T C Y; the map is normalized for display below.
+    for (let i = 0; i < scanSize; i += 1) {
+      let energy = 0;
+      for (let row = 0; row < 4; row += 1) {
+        for (let column = 0; column < 4; column += 1) {
+          energy += steering[i * 4 + row] * covariance[row * 4 + column] * steering[i * 4 + column];
+        }
+      }
+      rawSpectrum[i] = Math.max(0, energy);
+    }
+  } else if (trace > 1e-12) {
     const { vectors } = jacobiEigenSymmetric4(covariance);
     for (let scanIndex = 0; scanIndex < scanSize; scanIndex += 1) {
       let denominator = 0;

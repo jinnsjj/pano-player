@@ -8,6 +8,7 @@ uniform sampler2D source;
 uniform vec2 eyeSize;
 uniform vec2 crop;
 uniform bool eac;
+uniform int rotation;
 varying vec2 texCoord;
 const float PI = 3.141592653589793;
 vec2 eacUV(vec2 uv) {
@@ -37,6 +38,10 @@ void main() {
   if (eac) uv = eacUV(uv);
   // Clamp inside the selected eye, so filtering cannot bleed the other eye.
   uv = clamp(uv, 0.5 / eyeSize, 1.0 - 0.5 / eyeSize) * crop;
+  // Inverse sampling from the clockwise-rotated source, after selecting its eye.
+  if (rotation == 90) uv = vec2(uv.y, 1.0 - uv.x);
+  else if (rotation == 180) uv = 1.0 - uv;
+  else if (rotation == 270) uv = vec2(1.0 - uv.y, uv.x);
   gl_FragColor = texture2D(source, vec2(uv.x, 1.0 - uv.y));
 }`;
 
@@ -48,7 +53,7 @@ export class PanoProjection {
     this.texture.generateMipmaps = false;
     this.material = new ShaderMaterial({
       uniforms: { source: { value: this.texture }, eyeSize: { value: new Vector2() },
-        crop: { value: new Vector2(1, 1) }, eac: { value: false } },
+        crop: { value: new Vector2(1, 1) }, eac: { value: false }, rotation: { value: 0 } },
       vertexShader: 'varying vec2 texCoord; void main() { texCoord = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: projectionFragment,
       depthTest: false, depthWrite: false,
@@ -60,7 +65,7 @@ export class PanoProjection {
     this.gpu = new WebGLRenderer({ canvas, preserveDrawingBuffer: true });
     this.gpu.debug.onShaderError = () => { throw new Error('Projection shader could not compile.'); };
   }
-  configure(projection, layout) {
+  configure(projection, layout, rotation = 0) {
     if (this.source.width !== this.sourceWidth || this.source.height !== this.sourceHeight) {
       // WebGL texture storage cannot be resized after its first upload.
       this.texture.dispose();
@@ -68,8 +73,10 @@ export class PanoProjection {
     }
     const crop = this.material.uniforms.crop.value;
     crop.set(layout === 'sbs' ? .5 : 1, layout === 'tb' ? .5 : 1);
-    const width = Math.max(1, Math.floor(this.source.width * crop.x));
-    const height = Math.max(1, Math.floor(this.source.height * crop.y));
+    const quarterTurn = rotation === 90 || rotation === 270;
+    const width = Math.max(1, Math.floor((quarterTurn ? this.source.height : this.source.width) * crop.x));
+    const height = Math.max(1, Math.floor((quarterTurn ? this.source.width : this.source.height) * crop.y));
+    this.material.uniforms.rotation.value = rotation;
     this.material.uniforms.eyeSize.value.set(width, height);
     this.material.uniforms.eac.value = projection === 'eac';
     // Match angular resolution along the equator, without exceeding the GPU limit.

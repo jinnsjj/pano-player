@@ -12,13 +12,17 @@ export class FoaMonitor {
     this.video = video; this.onError = onError; this.onMap = onMap;
     this.mode = 'binaural'; this.volume = 1; this.muted = false;
     this.order = 'WYZX'; this.enabled = false; this.generation = 0;
+    this.mapAlgorithm = 'music'; this.mapSources = 1;
     this.normalization = 'SN3D';
     this.ready = false; this.state = 'initializing'; this.channelCount = null;
+    this.meterEnabled = false; this.meterEpoch = 0; this.meterData = null; this.meterStatus = 'off';
     this.events = new AbortController();
     for (const type of ['play', 'playing']) video.addEventListener(type, () => {
       if (type === 'playing') this.reset();
+      if (type === 'play') this.resetMeter();
       void this.context?.resume().catch(error => this.report(error));
     }, { signal: this.events.signal });
+    video.addEventListener('seeking', () => this.resetMeter(), { signal: this.events.signal });
     for (const type of ['pause', 'ended']) video.addEventListener(type, () => {
       void this.context?.suspend().catch(error => this.report(error));
     }, { signal: this.events.signal });
@@ -43,10 +47,15 @@ export class FoaMonitor {
       }
     }
     this.context = new AudioContext();
+    // The optional meter tap leaves all audible playback routes unchanged.
+    this.meterInput = this.context.createGain();
+    this.meterInput.channelCount = 2; this.meterInput.channelCountMode = 'explicit';
+    if (this.meterEnabled) void this.prepareMeter();
     if (this.video.attach) {
       if ([1, 2].includes(this.video.channels)) {
         this.bypass = true; this.channelCount = this.video.channels;
         this.fallback = this.context.createGain(); this.fallback.connect(this.context.destination);
+        this.fallback.connect(this.meterInput);
         this.applyGain();
         await this.video.attach(this.context, this.fallback);
         if (this.disposed) return;
@@ -80,6 +89,7 @@ export class FoaMonitor {
     this.fallback = this.context.createGain(); this.fallback.connect(this.context.destination);
     this.stereo = this.context.createGain(); this.stereo.gain.value = 0;
     this.stereo.connect(this.context.destination);
+    for (const node of [this.output, this.fallback, this.stereo]) node.connect(this.meterInput);
     const splitter = this.context.createChannelSplitter(4);
     const merger = this.context.createChannelMerger(2);
     this.capture.connect(splitter);
@@ -132,12 +142,18 @@ export class FoaMonitor {
   }
   setOrder(order) {
     if (!['WYZX', 'WXYZ'].includes(order)) return;
+    if (this.order !== order) this.resetMeter();
     this.order = order; this.reset(); this.configure();
   }
   setEnabled(enabled) { this.enabled = Boolean(enabled); this.reset(); }
+  setPowermap(algorithm, numSources) {
+    if (!['music', 'pwd'].includes(algorithm) || ![1, 2].includes(numSources)) return;
+    if (this.mapAlgorithm === algorithm && this.mapSources === numSources) return;
+    this.mapAlgorithm = algorithm; this.mapSources = numSources; this.reset();
+  }
   setNormalization(normalization) {
     if (!['SN3D', 'N3D'].includes(normalization) || normalization === this.normalization) return;
-    this.normalization = normalization; this.reset(); this.configure();
+    this.normalization = normalization; this.reset(); this.configure(); this.resetMeter();
   }
   async frame(data) {
     if (this.bypass || this.noAudio) return;
@@ -161,7 +177,8 @@ export class FoaMonitor {
     const started = performance.now();
     try {
       const result = await this.service.requestMap('preview', time, {
-        channels: data.channels, sampleRate: this.context.sampleRate, numSources: 1, mapAverage: .666,
+        channels: data.channels, sampleRate: this.context.sampleRate,
+        algorithm: this.mapAlgorithm, numSources: this.mapSources, mapAverage: .666,
       });
       if (!result || this.disposed || generation !== this.generation || !this.enabled) return;
       this.onMap({ generation, time, rgba: colourizeMap(result.map), computeMs: performance.now() - started });
@@ -171,9 +188,47 @@ export class FoaMonitor {
     this.orientation = matrix;
     if (this.source) this.renderer?.setRotationMatrixFromCamera(matrix);
   }
-  setMode(mode) { if (['stereo', 'binaural'].includes(mode)) { this.mode = mode; this.applyGain(); } }
+  setMode(mode) {
+    if (!['stereo', 'binaural'].includes(mode)) return;
+    if (this.mode !== mode) this.resetMeter();
+    this.mode = mode; this.applyGain();
+  }
   setVolume(value) { this.volume = Math.max(0, Math.min(1, value)); this.applyGain(); }
   setMuted(value) { this.muted = Boolean(value); this.applyGain(); }
+  prepareMeter() {
+    if (!this.context || this.disposed) return;
+    return this.meterLoading ||= (async () => {
+      this.meterStatus = 'loading';
+      const url = await loadScriptBlob(new URL('level-meter-processor.js', this.video.dataset.worklet).href, this.events.signal);
+      try { await this.context.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+      if (this.disposed) return;
+      this.meterNode = new AudioWorkletNode(this.context, 'level-meter-processor', {
+        numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+        channelCount: 2, channelCountMode: 'explicit', channelInterpretation: 'speakers',
+      });
+      this.meterNode.port.onmessage = ({ data }) => {
+        if (!this.disposed && this.meterEnabled && data.epoch === this.meterEpoch) this.meterData = data.data;
+      };
+      this.meterNode.onprocessorerror = () => { this.meterStatus = 'unavailable'; this.meterData = null; };
+      this.meterInput.connect(this.meterNode);
+      // The worklet emits silence, ensuring it is pulled without doubling the audio.
+      this.meterNode.connect(this.context.destination);
+      this.meterStatus = 'ready'; this.resetMeter();
+    })().catch(() => { if (!this.disposed) { this.meterStatus = 'unavailable'; this.meterData = null; } });
+  }
+  resetMeter() {
+    this.meterData = null; this.meterEpoch++;
+    this.meterNode?.port.postMessage({ type: 'configure', enabled: this.meterEnabled, epoch: this.meterEpoch });
+  }
+  setMeterEnabled(enabled) {
+    if (this.meterEnabled === Boolean(enabled)) return;
+    this.meterEnabled = Boolean(enabled); this.resetMeter();
+    if (this.meterEnabled) void this.prepareMeter();
+  }
+  getMeterState() {
+    return { status: this.meterStatus, data: this.meterData, active: this.context?.state === 'running' &&
+      !this.disposed && !this.video.paused && !this.video.seeking && !this.video.error };
+  }
   applyGain() {
     const volume = this.muted ? 0 : this.volume;
     this.video.volume = this.source ? 1 : volume;
@@ -186,6 +241,7 @@ export class FoaMonitor {
     this.disposed = true; this.events.abort(); this.service?.dispose();
     this.video.dispose?.();
     if (this.capture) this.capture.port.onmessage = null;
+    if (this.meterNode) this.meterNode.port.onmessage = null;
     void this.context?.close();
   }
   getState() {
