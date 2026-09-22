@@ -81,7 +81,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
     <div id="audio-options" class="settings-section" role="group" aria-labelledby="audio-heading">
       <h2 id="audio-heading"><i data-lucide="audio-lines" aria-hidden="true"></i>Audio</h2><div class="settings-row">
       <label id="audio-track-control" hidden>Track <select id="audio-track" aria-label="Audio track"></select></label>
-      <label>Monitor <select id="listening" aria-label="Listening mode"><option value="binaural">Binaural</option><option value="stereo">Stereo Monitor</option><option id="bypass-option" value="bypass" hidden>Bypass</option><option id="no-audio-option" value="none" hidden>No audio</option></select></label>
+      <label>Monitor <select id="listening" aria-label="Listening mode"><option value="binaural">Binaural</option><option value="stereo">Stereo</option><option id="bypass-option" value="bypass" hidden>Bypass</option><option id="no-audio-option" value="none" hidden>No audio</option></select></label>
       <label>Channel <select id="order" aria-label="FOA channel order"><option>WYZX</option><option>WXYZ</option></select></label>
       <label>Norm <select id="normalization" aria-label="FOA input normalization"><option>SN3D</option><option>N3D</option></select></label>
     </div></div>
