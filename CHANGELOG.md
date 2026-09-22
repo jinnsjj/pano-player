@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.28 - 2026-09-22
+
+### Changed
+
+- Compact media settings with tighter spacing, borderless dropdowns and matching Grid and PowerMap controls, with responsive wrapping in narrow panels.
+- Shorten the Stereo Monitor option to Stereo.
+
 ## 0.4.27 - 2026-09-22
 
 ### Added
