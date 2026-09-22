@@ -70,6 +70,13 @@ test('review UI keeps direct view tabs, labeled setting groups and accessible tr
   assert.match(html, /aria-label="Reset all meter statistics"/);
   assert.match(html, /aria-label="Close meters"/);
 });
+test('one accessible meter help describes every metric without adding controls to the rows', () => {
+  const html = renderHtml({ title: 'meters.wav' });
+  assert.equal((html.match(/data-lucide="circle-help"/g) || []).length, 1);
+  assert.match(html, /id="meter-help-button" aria-label="Meter descriptions" popovertarget="meter-help" aria-haspopup="dialog"/);
+  const help = html.match(/<div id="meter-help" popover="auto" role="dialog"[^>]*>[\s\S]*?<\/div>/)[0];
+  for (const text of ['Peak', 'dBFS', 'True Peak', 'dBTP', 'RMS', 'LUFS', 'LRA', 'LU', 'L/R', '400 ms', '3 seconds', 'since reset', '10th to 95th']) assert.ok(help.includes(text), text);
+});
 test('all webview icons are included in the selective Lucide registry', () => {
   const source = require('node:fs').readFileSync(require.resolve('../src/icons.js'), 'utf8');
   const registered = new Set(source.match(/icons: \{([^}]+)\}/)[1].split(',').map(name => name.trim()));

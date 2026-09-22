@@ -12,12 +12,15 @@ function setup(saved = {}) {
       audioTracks: [], selectedOptions: [], replaceChildren(...options) { this.options = options; },
       videoWidth: 960, videoHeight: 480, dataset: { defaults: JSON.stringify(defaults), preferences: JSON.stringify(normalize(saved)) }, style: { setProperty(k, v) { this[k] = v; } },
       listeners: {}, addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
-      fire(type) { for (const fn of this.listeners[type] || []) fn(); },
+      fire(type, event = {}) { for (const fn of this.listeners[type] || []) fn(event); },
       width: 2048, height: 1024,
       getContext: () => ({ clearRect() {}, putImageData() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, strokeText() {}, fillText() {} }),
       attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, load() {}, render() {},
       querySelectorAll() { return []; }, focus() {},
-      getBoundingClientRect() { return { x: 100, y: 76, width: 240, height: 148 }; },
+      showPopover() { this.popoverOpen = true; this.fire('toggle'); }, hidePopover() { this.popoverOpen = false; this.fire('toggle'); },
+      matches(selector) { return selector === ':popover-open' && Boolean(this.popoverOpen); },
+      contains(target) { return target === this; },
+      getBoundingClientRect() { return { x: 100, y: 76, top: 76, bottom: 224, right: 340, width: 240, height: 148 }; },
       pause() { this.paused = true; }, play() { this.paused = false; return Promise.resolve(); },
     });
     return elements.get(id);
@@ -30,10 +33,10 @@ function setup(saved = {}) {
     prepare() { return new Promise(() => {}); }
     resume() { return this.prepare(); }
     reset() { this.generation++; }
+    async selectAudioTrack(index) { get('video').audioTrackIndex = index; }
     setOrder(order) { this.order = order; this.reset(); }
     setNormalization(value) { this.normalization = value; this.reset(); }
     setEnabled(value) { this.enabled = value; this.reset(); }
-    async selectAudioTrack(index) { get('video').audioTrackIndex = index; }
     setPowermap(algorithm, sources) { this.mapAlgorithm = algorithm; this.mapSources = sources; this.reset(); }
     setVolume(value) { this.volume = value; } setMode(value) { this.mode = value; }
     setMuted(value) { this.muted = value; } dispose() {} getState() { return { ready: false, mode: this.mode, volume: this.volume, muted: this.muted }; }
@@ -61,9 +64,6 @@ function setup(saved = {}) {
   return { get, messages, onMap, onError, tick: now => frame(now), monitor: window.__PANO_PLAYER__.monitor,
     persisted: () => persisted, state: () => window.__PANO_PLAYER__.getState() };
 }
-test('meter overlay independently persists, closes, resets, and displays held peaks separately from RMS', () => {
-  const s = setup();
-  assert.equal(s.get('meter-overlay').hidden, true);
 test('audio track selector lists metadata safely, hides for single tracks and does not persist selection', async () => {
   const s = setup(), video = s.get('video');
   assert.equal(s.get('audio-track-control').hidden, true);
@@ -81,6 +81,9 @@ test('audio track selector lists metadata safely, hides for single tracks and do
   assert.equal(video.audioTrackIndex, 1); assert.equal(s.get('audio-track').disabled, false);
   assert.equal(s.messages.some(message => message.type === 'preferences'), false);
 });
+test('meter overlay independently persists, closes, resets, and displays held peaks separately from RMS', () => {
+  const s = setup();
+  assert.equal(s.get('meter-overlay').hidden, true);
   assert.equal(s.monitor.meterEnabled, false);
   s.get('meter').checked = true; s.get('meter').fire('change');
   assert.equal(s.persisted().meter, true); assert.equal(s.get('meter-overlay').hidden, false);
@@ -110,6 +113,22 @@ test('audio track selector lists metadata safely, hides for single tracks and do
   assert.equal(s.get('meter-overlay').hidden, true); assert.equal(s.persisted().meter, false);
   assert.equal(s.monitor.meterEnabled, false);
   assert.equal(setup({ meter: true }).get('meter-overlay').hidden, false);
+});
+test('native meter help never opens on hover or focus and dismisses without closing meters', () => {
+  const s = setup({ meter: true }), button = s.get('meter-help-button'), help = s.get('meter-help');
+  button.fire('pointerenter'); button.fire('focus');
+  assert.equal(help.matches(':popover-open'), false);
+  help.showPopover();
+  assert.equal(help.style.left, '100px'); assert.equal(help.style.top, '228px');
+  button.fire('pointerleave'); button.fire('blur'); help.fire('pointerleave');
+  assert.equal(help.popoverOpen, true);
+  let prevented = false, stopped = false;
+  s.get('meter-overlay').listeners.keydown.at(-1)({ key: 'Escape', preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } });
+  assert.equal(prevented && stopped, true); assert.equal(help.popoverOpen, false);
+  assert.equal(s.get('meter-overlay').hidden, false);
+  help.showPopover();
+  s.get('meter-close').fire('click'); assert.equal(help.popoverOpen, false);
+  assert.equal(s.get('video').paused, true);
 });
 test('native controls and playback do not await a stalled DSP initializer', () => {
   const s = setup(), video = s.get('video');
