@@ -12,6 +12,33 @@ function monitor(globals = {}) {
   const m = new module.exports.FoaMonitor(video, error => errors.push(error.message), map => maps.push(map));
   return { m, video, errors, maps };
 }
+test('track switching rebuilds audio routes, clears analysis and preserves preferences and play state', async () => {
+  for (const paused of [false, true]) {
+    const { m, video } = monitor();
+    let closed = 0, released = 0, initialized = 0;
+    video.paused = paused; video.audioTrackIndex = 0;
+    video.audioTracks = [{ supported: true }, { supported: true }];
+    video.pause = () => { video.paused = true; };
+    video.play = async () => { video.paused = false; };
+    video.selectAudioTrack = async index => { video.audioTrackIndex = index; video.channels = 4; };
+    m.context = { close: async () => { closed++; } };
+    m.service = { dispose() { released++; }, reset() {} };
+    m.bypass = true; m.ready = true; m.meterData = { duration: 9 };
+    m.volume = .4; m.muted = true; m.order = 'WXYZ'; m.normalization = 'N3D';
+    m.initialize = async () => {
+      assert.equal(m.bypass, false); assert.equal(m.source, undefined); assert.equal(m.service, undefined);
+      initialized++; m.ready = true; m.channelCount = video.channels;
+    };
+    await m.selectAudioTrack(1);
+    assert.equal(closed, 1); assert.equal(released, 1); assert.equal(initialized, 1);
+    assert.equal(video.paused, paused); assert.equal(video.currentTime, 2);
+    assert.equal(m.channelCount, 4); assert.equal(m.meterData, null);
+    assert.equal(m.volume, .4); assert.equal(m.muted, true);
+    assert.equal(m.order, 'WXYZ'); assert.equal(m.normalization, 'N3D');
+    await m.selectAudioTrack(1); assert.equal(initialized, 1);
+    await assert.rejects(m.selectAudioTrack(-1), /Unsupported/);
+  }
+});
 test('mono/stereo attach straight to gain without initializing FOA DSP and remain camera-independent', async () => {
   for (const channels of [1, 2]) {
     const { m, video, errors } = monitor({ AudioContext: class {

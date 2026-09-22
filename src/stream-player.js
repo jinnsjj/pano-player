@@ -27,10 +27,12 @@ export class StreamPlayer extends EventTarget {
       const response = await fetch(this.dataset.decoder, { signal: this.abort.signal });
       if (!response.ok) throw new Error(`Cannot load bundled decoder (${response.status}).`);
       const url = URL.createObjectURL(new Blob([await response.text()], { type: 'text/javascript' }));
+      if (this.disposed) { URL.revokeObjectURL(url); return; }
       this.worker = new Worker(url); URL.revokeObjectURL(url);
       this.worker.onerror = event => this.fail(new Error(event.message));
       this.worker.onmessage = ({ data }) => this.receive(data);
       this.worker.postMessage({ type: 'open', url: this.dataset.source,
+        epoch: this.epoch, audioTrackIndex: this.audioTrackIndex, time: this.time,
         libav: new URL('libav-6.10.7.1.5-decoder-aac.js', this.dataset.decoder).href });
     } catch (error) { this.fail(error); }
   }
@@ -44,6 +46,7 @@ export class StreamPlayer extends EventTarget {
     if (data.type === 'metadata') {
       this.sampleRate = data.sampleRate; this.duration = data.duration ?? NaN;
       this.channels = data.channels;
+      this.audioTracks = data.audioTracks ?? []; this.audioTrackIndex = data.audioTrackIndex;
       this.videoWidth = data.width; this.videoHeight = data.height;
       this.element.width = Math.max(1, data.width); this.element.height = Math.max(1, data.height);
       this.codec = data.codec; this.readyState = 1; this.metadataReady(); this.emit('loadedmetadata');
@@ -92,6 +95,23 @@ export class StreamPlayer extends EventTarget {
     this.node.port.postMessage({ type: 'seek', frame: Math.round(this.time * this.sampleRate), epoch: this.epoch });
     this.refill();
     if (!this.paused) this.node.port.postMessage({ type: 'play', epoch: this.epoch });
+  }
+  async selectAudioTrack(index) {
+    if (!Number.isInteger(index) || !this.audioTracks?.[index]?.supported) throw new Error('Unsupported audio track.');
+    this.pause();
+    this.worker?.terminate(); this.node?.disconnect();
+    if (this.node) this.node.port.onmessage = null;
+    this.node = undefined; this.context = undefined;
+    this.nextFrame?.frame.close(); this.nextFrame = undefined;
+    this.epoch++; this.audioTrackIndex = index; this.error = undefined;
+    this.readyState = 0; this.seeking = true; this.eof = false;
+    this.audioPending = this.videoPending = this.videoEnded = false;
+    this.endFrame = 0; this.previewFrame = true;
+    this.metadata = new Promise((resolve, reject) => { this.metadataReady = resolve; this.metadataError = reject; });
+    this.metadata.catch(() => {});
+    this.emit('seeking');
+    void this.load();
+    await this.metadata;
   }
   refill() {
     if (!this.node || this.eof || this.audioPending || (this.endFrame / this.sampleRate - this.time) > 2) return;

@@ -38,7 +38,8 @@ To use PanoPlayer by default for MP4 and WebM, add these associations to your se
 - Videos without audio use a video clock and support both views, seeking and replay without initializing audio decoders or DSP.
 - Four-channel input must be first-order Ambisonics, not quadraphonic speaker audio. Select WYZX (ACN) or WXYZ, and SN3D or N3D. Defaults are WYZX/SN3D; FuMa is unsupported.
 - Binaural monitoring follows the camera direction. Stereo Monitor stays aligned to the recording axes. WAV and FLAC can display a standalone PowerMap.
-- When audio is present, only the primary audio track and 1, 2 or 4 channels are supported. PowerMap offers PWD or MUSIC with one/two assumed sources for qualitative direction review, not calibrated measurement or source separation.
+- For multiple audio tracks, **Audio > Track** selects by name, language, channel count and codec. Switching preserves position and play/pause state, clears meter/PowerMap history and rebuilds the audio route for the selected track. Selection is per open file, not a saved preference. The primary track is selected initially, falling back to the first track with a supported channel count when necessary. Only 1, 2 or 4 channels are supported; other channel counts are disabled.
+- PowerMap offers PWD or MUSIC with one/two assumed sources for qualitative direction review, not calibrated measurement or source separation.
 
 ## PowerMap
 

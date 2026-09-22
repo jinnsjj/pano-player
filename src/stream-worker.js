@@ -15,13 +15,27 @@ function position(time) {
   audio = audioSink?.samples(time - .12);
   video = videoSink?.samples(time);
 }
-async function open(url, libav) {
+async function open(url, libav, selectedTrack, time = 0) {
   input?.dispose();
   input = new Input({ formats: ALL_FORMATS, source: new UrlSource(url, {
     maxCacheSize: 8 * 1024 * 1024, getRetryDelay: attempt => attempt < 2 ? .25 : null,
     handleUnhandledError: error => send({ type: 'error', message: error.message }),
   }) });
-  const audioTrack = await input.getPrimaryAudioTrack();
+  const tracks = await input.getAudioTracks();
+  const audioTracks = await Promise.all(tracks.map(async (track, index) => {
+    const config = await track.getDecoderConfig().catch(() => null);
+    return { index, name: await track.getName(), language: await track.getLanguageCode(),
+      channels: config?.numberOfChannels ?? 0, sampleRate: config?.sampleRate ?? 0,
+      codec: track.codec, supported: !!config && [1, 2, 4].includes(config.numberOfChannels) };
+  }));
+  if (selectedTrack !== undefined && (!Number.isInteger(selectedTrack) || !audioTracks[selectedTrack]?.supported)) {
+    throw new Error('Unsupported audio track.');
+  }
+  const primary = await input.getPrimaryAudioTrack();
+  const primaryIndex = tracks.indexOf(primary);
+  const audioTrackIndex = selectedTrack ?? (audioTracks[primaryIndex]?.supported ? primaryIndex : audioTracks.findIndex(track => track.supported));
+  const audioTrack = tracks[audioTrackIndex];
+  if (tracks.length && !audioTrack) throw new Error('No supported mono, stereo or four-channel FOA audio track found.');
   const videoTrack = await input.getPrimaryVideoTrack();
   if (!audioTrack && !videoTrack) throw new Error('No audio or video track found.');
   const config = await audioTrack?.getDecoderConfig();
@@ -45,8 +59,9 @@ async function open(url, libav) {
   const videoConfig = await videoTrack?.getDecoderConfig();
   audioSink = audioTrack ? new AudioSampleSink(audioTrack) : undefined;
   videoSink = videoTrack ? new VideoSampleSink(videoTrack) : undefined;
-  position(0);
+  position(time);
   send({ type: 'metadata', sampleRate: rate, channels: channelCount, codec: audioTrack?.codec ?? null,
+    audioTracks, audioTrackIndex,
     width: videoConfig?.codedWidth || 0, height: videoConfig?.codedHeight || 0,
     duration: await input.getDurationFromMetadata() });
 }
@@ -92,9 +107,10 @@ async function pullVideo(generation) {
   } finally { sample.close(); }
 }
 self.onmessage = ({ data }) => {
+  if (data.type === 'open') epoch = data.epoch ?? 0;
   if (data.type === 'seek') { epoch = data.epoch; position(data.time); return; }
   if (data.epoch !== epoch && data.type !== 'open') return;
   const generation = epoch;
-  const task = data.type === 'open' ? open(data.url, data.libav) : data.type === 'audio' ? pullAudio(generation) : pullVideo(generation);
+  const task = data.type === 'open' ? open(data.url, data.libav, data.audioTrackIndex, data.time) : data.type === 'audio' ? pullAudio(generation) : pullVideo(generation);
   void task.catch(error => { if (generation === epoch) send({ type: 'error', message: error.message }); });
 };
