@@ -132,6 +132,8 @@ label { display: inline-flex; align-items: center; gap: 8px; color: var(--muted)
 select { font: inherit; background: var(--raised); color: var(--text); border: 1px solid var(--control-border); border-radius: 4px; min-height: 34px; padding: 4px 8px; max-width: 100%; cursor: pointer; }
 footer { display: flex; gap: 8px 24px; justify-content: space-between; flex-wrap: wrap; color: var(--muted); padding: 10px 24px; border-top: 1px solid var(--line); font: 12px/1.5 var(--mono); }
 #detail { min-width: 0; overflow-wrap: anywhere; }
+#audio-track-control { max-width: 100%; }
+#audio-track { width: 240px; min-width: 0; text-overflow: ellipsis; }
 @media (max-width: 760px) {
   header, #transport, #options, footer { padding-inline: 16px; }
   header { flex-wrap: wrap; gap: 8px 16px; }

@@ -4,6 +4,40 @@ const vm = require('node:vm');
 const path = require('node:path');
 const { buildSync } = require('esbuild');
 
+test('track reload preserves time, releases old PCM and ignores stale worker messages', async () => {
+  const bundle = buildSync({ entryPoints: [path.join(__dirname, '../src/stream-player.js')],
+    bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
+  const context = { module: { exports: {} }, exports: {}, window: {}, EventTarget, Event, AbortController, fetch };
+  vm.runInNewContext(bundle, context);
+  const { StreamPlayer } = context.module.exports;
+  StreamPlayer.prototype.load = () => {};
+  const player = new StreamPlayer({ dataset: {} });
+  let terminated = 0, disconnected = 0, closed = 0;
+  player.worker = { terminate() { terminated++; } };
+  player.node = { disconnect() { disconnected++; }, port: { postMessage() {} } };
+  player.audioTracks = [{ supported: true }, { supported: true }, { supported: false }];
+  player.audioTrackIndex = 0; player.time = 7; player.paused = false;
+  player.channels = 2; player.sampleRate = 44100;
+  player.nextFrame = { frame: { close() { closed++; } } };
+  player.load = async () => {
+    player.receive({ type: 'metadata', epoch: player.epoch, channels: 4, sampleRate: 48000,
+      width: 0, height: 0, duration: 20, audioTracks: player.audioTracks, audioTrackIndex: 1 });
+  };
+  await assert.rejects(player.selectAudioTrack(2), /Unsupported/);
+  assert.equal(terminated, 0);
+  await player.selectAudioTrack(1);
+  assert.equal(terminated, 1); assert.equal(disconnected, 1); assert.equal(closed, 1);
+  assert.equal(player.time, 7); assert.equal(player.paused, true);
+  assert.equal(player.sampleRate, 48000); assert.equal(player.channels, 4);
+  assert.equal(player.node, undefined); assert.equal(player.epoch, 1);
+  player.receive({ type: 'error', epoch: 0, message: 'old decoder' });
+  player.receive({ type: 'audio', epoch: 0, channels: [] });
+  assert.equal(player.error, undefined);
+  player.ended = true;
+  await player.selectAudioTrack(0);
+  assert.equal(player.ended, true, 'Changing tracks at EOF must preserve replay-on-play');
+});
+
 test('stream player closes stale frames, preserves seek epochs and bounds PCM prefetch', async () => {
   const bundle = buildSync({ entryPoints: [path.join(__dirname, '../src/stream-player.js')],
     bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;

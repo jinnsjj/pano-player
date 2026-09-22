@@ -9,6 +9,7 @@ function setup(saved = {}) {
   const get = id => {
     if (!elements.has(id)) elements.set(id, {
       value: '.75', checked: true, paused: true, currentTime: 0, duration: 10, readyState: 4,
+      audioTracks: [], selectedOptions: [], replaceChildren(...options) { this.options = options; },
       videoWidth: 960, videoHeight: 480, dataset: { defaults: JSON.stringify(defaults), preferences: JSON.stringify(normalize(saved)) }, style: { setProperty(k, v) { this[k] = v; } },
       listeners: {}, addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
       fire(type) { for (const fn of this.listeners[type] || []) fn(); },
@@ -32,6 +33,7 @@ function setup(saved = {}) {
     setOrder(order) { this.order = order; this.reset(); }
     setNormalization(value) { this.normalization = value; this.reset(); }
     setEnabled(value) { this.enabled = value; this.reset(); }
+    async selectAudioTrack(index) { get('video').audioTrackIndex = index; }
     setPowermap(algorithm, sources) { this.mapAlgorithm = algorithm; this.mapSources = sources; this.reset(); }
     setVolume(value) { this.volume = value; } setMode(value) { this.mode = value; }
     setMuted(value) { this.muted = value; } dispose() {} getState() { return { ready: false, mode: this.mode, volume: this.volume, muted: this.muted }; }
@@ -52,6 +54,7 @@ function setup(saved = {}) {
   };
   vm.runInNewContext(buildSync({ entryPoints: [require.resolve('../media/player.js')], bundle: true, write: false }).outputFiles[0].text, {
     window, document: { getElementById: get }, performance,
+    Option: class { constructor(text, value) { this.textContent = text; this.value = value; } },
     acquireVsCodeApi: () => ({ getState: () => saved, setState(value) { persisted = value; }, postMessage: m => messages.push(m) }),
     lucide: { createIcons() {} }, requestAnimationFrame(fn) { frame = fn; }, Uint8ClampedArray, ImageData: class {},
   });
@@ -61,6 +64,23 @@ function setup(saved = {}) {
 test('meter overlay independently persists, closes, resets, and displays held peaks separately from RMS', () => {
   const s = setup();
   assert.equal(s.get('meter-overlay').hidden, true);
+test('audio track selector lists metadata safely, hides for single tracks and does not persist selection', async () => {
+  const s = setup(), video = s.get('video');
+  assert.equal(s.get('audio-track-control').hidden, true);
+  video.audioTracks = [
+    { index: 0, name: '<Stereo>', language: 'eng', channels: 2, codec: 'aac', supported: true },
+    { index: 1, name: 'FOA', language: 'und', channels: 4, codec: 'opus', supported: true },
+    { index: 2, name: 'Surround', channels: 6, supported: false },
+  ];
+  video.audioTrackIndex = 0; video.fire('loadedmetadata');
+  assert.equal(s.get('audio-track-control').hidden, false);
+  assert.match(s.get('audio-track').options[0].textContent, /<Stereo>.*eng.*2ch.*aac/);
+  assert.equal(s.get('audio-track').options[2].disabled, true);
+  s.get('audio-track').value = '1';
+  await s.get('audio-track').listeners.change[0]();
+  assert.equal(video.audioTrackIndex, 1); assert.equal(s.get('audio-track').disabled, false);
+  assert.equal(s.messages.some(message => message.type === 'preferences'), false);
+});
   assert.equal(s.monitor.meterEnabled, false);
   s.get('meter').checked = true; s.get('meter').fire('change');
   assert.equal(s.persisted().meter, true); assert.equal(s.get('meter-overlay').hidden, false);

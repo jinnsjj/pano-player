@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Audio track selection with names, languages, channel counts and codecs. Switching preserves playback position and play/pause state and updates Bypass or FOA processing for the selected track.
+
 ## 0.4.26 - 2026-09-21
 
 ### Added

@@ -114,7 +114,7 @@ export class FoaMonitor {
     this.state = 'checking-channels'; this.applyGain();
     if (!this.video.paused) await this.context.resume();
     else await this.context.suspend();
-    void this.initializeMap().catch(error => this.report(error));
+    this.mapLoading = this.initializeMap().catch(error => this.report(error));
   }
   async initializeMap() {
     const url = await loadScriptBlob(this.video.dataset.worker, this.events.signal);
@@ -237,6 +237,33 @@ export class FoaMonitor {
     if (this.stereo) this.stereo.gain.value = this.ready && this.mode === 'stereo' ? volume : 0;
   }
   async resume() { await this.prepare(); await this.context?.resume(); }
+  async selectAudioTrack(index) {
+    if (this.switchingTrack) return this.switchingTrack;
+    if (index === this.video.audioTrackIndex && !this.video.error) return;
+    if (!Number.isInteger(index) || !this.video.audioTracks?.[index]?.supported) throw new Error('Unsupported audio track.');
+    const playing = !this.video.paused;
+    this.video.pause();
+    this.switchingTrack = (async () => {
+      await this.initialized;
+      await Promise.all([this.mapLoading, this.meterLoading]);
+      if (this.disposed) return;
+      this.reset(); this.resetMeter(); this.service?.dispose();
+      if (this.capture) this.capture.port.onmessage = null;
+      if (this.meterNode) this.meterNode.port.onmessage = null;
+      await this.context?.close();
+      if (this.disposed) return;
+      for (const key of ['context', 'source', 'renderer', 'capture', 'output', 'fallback', 'stereo',
+        'service', 'mapLoading', 'meterInput', 'meterNode', 'meterLoading', 'initialized']) this[key] = undefined;
+      this.ready = this.bypass = this.noAudio = false;
+      this.channelCount = null; this.state = 'initializing'; this.meterStatus = 'off';
+      await this.video.selectAudioTrack(index);
+      if (this.disposed) return;
+      await this.prepare();
+      if (this.video.error) throw this.video.error;
+      if (playing) await this.video.play();
+    })();
+    try { await this.switchingTrack; } finally { this.switchingTrack = undefined; }
+  }
   dispose() {
     this.disposed = true; this.events.abort(); this.service?.dispose();
     this.video.dispose?.();

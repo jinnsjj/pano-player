@@ -101,7 +101,9 @@ Videos without an audio track also play in both views, with seeking and replay. 
 - **No extra decoder setup**: no user-installed FFmpeg, FFprobe, Python, server, or port forwarding.
 - **Source files stay unchanged**, and media is not uploaded to third-party processing services.
 
-Video decoding depends on the host browser's WebCodecs support. Perspective view, EAC, rotation and single-eye cropping require WebGL2. When audio is present, the player supports 1, 2, or 4 channels and uses the primary audio track. Other channel counts, track selection, FuMa normalization, and arbitrary cube-face layouts are not supported.
+For media with multiple audio tracks, choose **Audio > Track**. Track names, languages, channel counts and codecs help identify each track. Switching retains the playback position and play/pause state; mono/stereo tracks use Bypass and four-channel FOA tracks use spatial processing. Each file starts with its primary supported audio track; track selection is not saved across files.
+
+Video decoding depends on the host browser's WebCodecs support. Perspective view, EAC, rotation and single-eye cropping require WebGL2. Audio supports 1, 2, or 4 channels; tracks with other channel counts are disabled in the selector. FuMa normalization and arbitrary cube-face layouts are not supported.
 
 ## Open Your Media
 

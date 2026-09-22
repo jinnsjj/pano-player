@@ -19,6 +19,7 @@ import { FloatingOverlay } from './floating-overlay.js';
   let view; let viewMode = 'flat'; let viewLoading;
   let projector; let projectionLoading; let projectionRequest = 0;
   let ready = false; let mappedAt = null; let lastMap; let processingIssue = false;
+  let switchingTrack = false;
   let hasVideo = true; let sourceAspect = 2; let mediaDetail = 'Native media';
   $('projection').disabled = $('layout').disabled = $('rotation').disabled = true;
   function level(id) { $(id + '-value').textContent = Math.round(Number($(id).value) * 100) + '%'; }
@@ -133,7 +134,7 @@ import { FloatingOverlay } from './floating-overlay.js';
     $('time').textContent = format(video.currentTime) + ' / ' + format(video.duration);
     $('seek').value = video.currentTime;
     $('seek').max = Number.isFinite(video.duration) ? video.duration : 0;
-    $('seek').disabled = !Number.isFinite(video.duration) || video.duration <= 0;
+    $('seek').disabled = switchingTrack || !Number.isFinite(video.duration) || video.duration <= 0;
   }
   function updateClock() {
     transport();
@@ -173,6 +174,15 @@ import { FloatingOverlay } from './floating-overlay.js';
     diagnostic('DSP: ' + error.message);
   }
   function metadata() {
+    $('audio-track-control').hidden = video.audioTracks.length < 2;
+    $('audio-track').replaceChildren(...video.audioTracks.map(track => {
+      const label = [String(track.index + 1), track.name, track.language === 'und' ? '' : track.language,
+        track.channels + 'ch', track.codec, track.supported ? '' : 'unsupported'].filter(Boolean).join(' / ');
+      const option = new Option(label, String(track.index));
+      option.disabled = !track.supported; return option;
+    }));
+    $('audio-track').value = String(video.audioTrackIndex);
+    $('audio-track').title = $('audio-track').selectedOptions[0]?.textContent ?? '';
     const bypass = [1, 2].includes(video.channels);
     const noAudio = video.channels === 0;
     for (const id of ['enabled', 'opacity', 'order', 'normalization', 'listening']) $(id).disabled = bypass || noAudio;
@@ -204,7 +214,7 @@ import { FloatingOverlay } from './floating-overlay.js';
   }
   function canPlay() {
     ready = true; $('empty').hidden = true;
-    $('play').disabled = false; $('mute').disabled = video.channels === 0; transport();
+    $('play').disabled = switchingTrack; $('mute').disabled = video.channels === 0; transport();
     if (stats.canPlayMs === null) { stats.canPlayMs = performance.now(); diagnostic('Streaming canplay: ' + stats.canPlayMs.toFixed(1) + ' ms'); }
   }
   video.addEventListener('loadedmetadata', metadata);
@@ -252,6 +262,18 @@ import { FloatingOverlay } from './floating-overlay.js';
     persist({ muted: monitor.muted });
   });
   $('listening').addEventListener('change', () => { monitor.setMode($('listening').value); persist({ listening: $('listening').value }); updateDetail(); });
+  $('audio-track').addEventListener('change', async () => {
+    switchingTrack = true; $('audio-track').disabled = $('play').disabled = true;
+    processingIssue = false; reset(); transport();
+    try {
+      await monitor.selectAudioTrack(Number($('audio-track').value));
+      $('retry').hidden = true; updateDetail();
+    } catch (error) { processingError(error); }
+    finally {
+      switchingTrack = false; $('audio-track').disabled = false;
+      $('play').disabled = !!video.error; transport();
+    }
+  });
   $('enabled').addEventListener('change', () => { monitor.setEnabled($('enabled').checked); lastMap = null; clear(); persist({ enabled: $('enabled').checked }); updateDetail(); });
   function updateMapControls() {
     $('mapAlgorithm').disabled = [0, 1, 2].includes(video.channels);
@@ -319,6 +341,7 @@ import { FloatingOverlay } from './floating-overlay.js';
   window.addEventListener('pagehide', () => { projectionRequest++; projector?.dispose(); view?.dispose(); monitor.dispose(); });
   window.__PANO_PLAYER__ = { monitor, get view() { return view; }, getState: () => ({
     ...stats, ready, generation: monitor.generation, currentTime: video.currentTime, paused: video.paused, mappedAt,
+    audioTracks: video.audioTracks, audioTrackIndex: video.audioTrackIndex, switchingTrack,
     projection: hasVideo ? effectiveProjection() : 'audio', projectionMode: $('projection').value, preferences: { ...preferences }, layout: $('layout').value, listening: monitor.getState(), view: view?.getState(),
     videoQuality: (() => { const q = video.getVideoPlaybackQuality?.(); return q && { total: q.totalVideoFrames, dropped: q.droppedVideoFrames }; })(),
   }) };
