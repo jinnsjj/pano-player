@@ -9,9 +9,29 @@ export class MeterOverlay extends FloatingOverlay {
     this.monitor = monitor; this.lastFrame = -Infinity;
     for (const tick of this.panel.querySelectorAll('[data-db]')) tick.style.bottom = scale(Number(tick.dataset.db)) + '%';
     $('meter-reset').addEventListener('click', () => monitor.resetMeter());
+    const button = $('meter-help-button'), help = $('meter-help');
+    this.hideHelp = () => help.hidePopover();
+    help.addEventListener('toggle', () => {
+      if (!help.matches(':popover-open')) return;
+      if (this.panel.hidden) { this.hideHelp(); return; }
+      const anchor = button.getBoundingClientRect(), bounds = help.getBoundingClientRect();
+      const top = anchor.bottom + bounds.height + 12 <= window.innerHeight ? anchor.bottom + 4 : anchor.top - bounds.height - 4;
+      help.style.left = Math.max(8, Math.min(window.innerWidth - bounds.width - 8, anchor.right - bounds.width)) + 'px';
+      help.style.top = Math.max(8, Math.min(window.innerHeight - bounds.height - 8, top)) + 'px';
+    });
+    this.panel.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && help.matches(':popover-open')) {
+        this.hideHelp(); event.preventDefault(); event.stopPropagation();
+      }
+    }, true);
+    $('meter-titlebar').addEventListener('pointerdown', event => {
+      if (!button.contains(event.target)) this.hideHelp();
+    });
+    window.addEventListener('resize', this.hideHelp);
   }
   setEnabled(enabled) {
     super.setEnabled(enabled);
+    if (this.panel.hidden) this.hideHelp();
     this.monitor.setMeterEnabled(this.enabled && this.available);
   }
   render(now) {

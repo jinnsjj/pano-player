@@ -90,6 +90,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
   <section class="floating-overlay" id="meter-overlay" role="dialog" aria-labelledby="meter-heading" tabindex="-1" hidden>
     <div class="floating-titlebar" id="meter-titlebar" tabindex="0" title="Drag or use arrow keys to move meters">
       <h2 id="meter-heading"><i data-lucide="audio-lines" aria-hidden="true"></i>Output Meters</h2>
+      <button id="meter-help-button" aria-label="Meter descriptions" popovertarget="meter-help" aria-haspopup="dialog" title=""><i data-lucide="circle-help" aria-hidden="true"></i></button>
       <button id="meter-reset" title="Reset all meter statistics" aria-label="Reset all meter statistics"><i data-lucide="rotate-ccw" aria-hidden="true"></i></button>
       <button id="meter-close" title="Close meters" aria-label="Close meters"><i data-lucide="x" aria-hidden="true"></i></button>
     </div>
@@ -106,6 +107,17 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
     </div>
     <div id="meter-status" aria-live="off">Initializing</div>
   </section>
+  <div id="meter-help" popover="auto" role="dialog" aria-label="Meter descriptions" tabindex="-1" autofocus>
+    <p>Measured after monitoring, volume and mute.</p>
+    <dl>
+      <dt>Peak · dBFS</dt><dd>Sample peaks for left (L) and right (R). 0 dBFS is the digital ceiling.</dd>
+      <dt>True Peak · dBTP</dt><dd>Estimated peaks between samples, per L/R channel. Can exceed the sample peak.</dd>
+      <dt>RMS · dBFS</dt><dd>Combined, unweighted stereo energy. M: 400 ms average. I: average since reset.</dd>
+      <dt>LUFS</dt><dd>Perceptually weighted loudness. M: 400 ms. S: 3 seconds. I: gated average since reset, excluding very quiet passages.</dd>
+      <dt>LRA · LU</dt><dd>Loudness range: the 10th to 95th percentile of gated short-term loudness. Larger values mean greater variation.</dd>
+    </dl>
+    <p>Thin markers hold maximum levels until reset. -- means more measurement history is needed.</p>
+  </div>
   <section class="floating-overlay" id="overview-overlay" role="dialog" aria-labelledby="overview-heading" tabindex="-1" hidden>
     <div class="floating-titlebar" id="overview-titlebar" tabindex="0" title="Drag or use arrow keys to move PanoView">
       <h2 id="overview-heading"><i data-lucide="globe" aria-hidden="true"></i>PanoView</h2>
