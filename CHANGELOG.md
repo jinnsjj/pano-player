@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.29 - 2026-09-23
+
+### Fixed
+
+- Hide dropdown focus outlines after mouse or touch interaction while preserving focus and keyboard navigation.
+
 ## 0.4.28 - 2026-09-22
 
 ### Changed
