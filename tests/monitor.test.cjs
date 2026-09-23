@@ -23,10 +23,11 @@ test('track switching rebuilds audio routes, clears analysis and preserves prefe
     video.selectAudioTrack = async index => { video.audioTrackIndex = index; video.channels = 4; };
     m.context = { close: async () => { closed++; } };
     m.service = { dispose() { released++; }, reset() {} };
-    m.bypass = true; m.ready = true; m.meterData = { duration: 9 };
+    m.bypass = true; m.ready = true; m.meterData = { duration: 9 }; m.headlocked = {};
     m.volume = .4; m.muted = true; m.order = 'WXYZ'; m.normalization = 'N3D';
     m.initialize = async () => {
       assert.equal(m.bypass, false); assert.equal(m.source, undefined); assert.equal(m.service, undefined);
+      assert.equal(m.headlocked, undefined);
       initialized++; m.ready = true; m.channelCount = video.channels;
     };
     await m.selectAudioTrack(1);
@@ -40,7 +41,7 @@ test('track switching rebuilds audio routes, clears analysis and preserves prefe
   }
 });
 test('non-FOA channel counts attach straight to gain without initializing FOA DSP and remain camera-independent', async () => {
-  for (const channels of [1, 2, 3, 6, 8, 16, 32]) {
+  for (const channels of [1, 2, 3, 8, 16, 32]) {
     const { m, video, errors } = monitor({ AudioContext: class {
       createGain() { return { gain: {}, connections: [], connect(node) { this.connections.push(node); } }; }
       async resume() {} async suspend() {}
@@ -66,6 +67,50 @@ test('non-FOA channel counts attach straight to gain without initializing FOA DS
     m.setMuted(true); assert.equal(gain.gain.value, 0);
     m.setMuted(false); assert.equal(gain.gain.value, .4);
     assert.equal(video.currentTime, 2); assert.equal(video.paused, false);
+  }
+});
+test('FOA+HL routes stereo output separately from rotation and follows volume, mute and meter', async () => {
+  class Node {
+    gain = {}; connections = []; port = { postMessage() {} };
+    connect(...args) { this.connections.push(args); }
+    addEventListener() {}
+  }
+  for (const channels of [4, 6]) {
+    const renderer = { input: new Node(), output: new Node(), async initialize() {}, setRotationMatrixFromCamera() {} };
+    const { m, video, errors } = monitor({ Blob, fetch: async () => ({ ok: true, text: async () => '' }),
+      AudioContext: class {
+        destination = new Node(); audioWorklet = { async addModule() {} }; sampleRate = 48000;
+        createGain() { return new Node(); }
+        createChannelSplitter() { return new Node(); }
+        createChannelMerger() { return new Node(); }
+        async resume() {} async suspend() {}
+      },
+      AudioWorkletNode: class extends Node { constructor(context, name, options) { super(); this.options = options; } },
+      Omnitone: { createFOARenderer: () => renderer },
+    });
+    video.channels = channels; video.metadata = Promise.resolve(); video.dataset = { worklet: 'test' };
+    video.attach = async (_, destination) => { assert.equal(destination, m.capture); video.node = new Node(); };
+    m.initializeMap = async () => {};
+    await m.prepare();
+    assert.deepEqual(errors, []);
+    assert.equal(m.bypass, undefined);
+    assert.deepEqual(Array.from(m.capture.options.outputChannelCount), [4, 2]);
+    assert.ok(m.capture.connections.some(([node, output]) => node === m.headlocked && output === 1));
+    assert.ok(m.headlocked.connections.some(([node]) => node === m.context.destination));
+    assert.ok(m.headlocked.connections.some(([node]) => node === m.meterInput));
+    assert.ok(!m.headlocked.connections.some(([node]) => node === renderer.input));
+    assert.equal(m.headlocked.gain.value, 0);
+    await m.frame({ type: 'frame', channelCount: channels, channels: [], epoch: m.generation });
+    assert.equal(m.getState().channels, channels);
+    m.setVolume(.4);
+    for (const mode of ['binaural', 'stereo']) {
+      m.setMode(mode); m.setOrientation({}); m.setNormalization('N3D'); m.setOrder('WXYZ');
+      assert.equal(m.headlocked.gain.value, channels === 6 ? .4 : 0);
+      m.setMuted(true); assert.equal(m.headlocked.gain.value, 0);
+      m.setMuted(false); assert.equal(m.headlocked.gain.value, channels === 6 ? .4 : 0);
+    }
+    await m.frame({ type: 'error', channelCount: 2, epoch: m.generation });
+    assert.equal(m.headlocked.gain.value, 0);
   }
 });
 test('meter statistics reset on discontinuities, not gain changes, and disable when closed', () => {

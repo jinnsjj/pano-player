@@ -52,7 +52,7 @@ export class FoaMonitor {
     this.meterInput.channelCount = 2; this.meterInput.channelCountMode = 'explicit';
     if (this.meterEnabled) void this.prepareMeter();
     if (this.video.attach) {
-      if (this.video.channels !== 4) {
+      if (![4, 6].includes(this.video.channels)) {
         this.bypass = true; this.channelCount = this.video.channels;
         this.fallback = this.context.createGain(); this.fallback.connect(this.context.destination);
         this.fallback.connect(this.meterInput);
@@ -72,7 +72,7 @@ export class FoaMonitor {
     } finally { URL.revokeObjectURL(workletUrl); }
     if (this.disposed) return;
     this.capture = new AudioWorkletNode(this.context, 'foa-capture-processor', {
-      numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [4],
+      numberOfInputs: 1, numberOfOutputs: 2, outputChannelCount: [4, 2],
       channelCountMode: 'max', channelInterpretation: 'discrete',
       processorOptions: { frameSize: 1024 },
     });
@@ -89,7 +89,10 @@ export class FoaMonitor {
     this.fallback = this.context.createGain(); this.fallback.connect(this.context.destination);
     this.stereo = this.context.createGain(); this.stereo.gain.value = 0;
     this.stereo.connect(this.context.destination);
-    for (const node of [this.output, this.fallback, this.stereo]) node.connect(this.meterInput);
+    this.headlocked = this.context.createGain(); this.headlocked.gain.value = 0;
+    this.capture.connect(this.headlocked, 1);
+    this.headlocked.connect(this.context.destination);
+    for (const node of [this.output, this.fallback, this.stereo, this.headlocked]) node.connect(this.meterInput);
     const splitter = this.context.createChannelSplitter(4);
     const merger = this.context.createChannelMerger(2);
     this.capture.connect(splitter);
@@ -166,11 +169,11 @@ export class FoaMonitor {
         this.video.canPlayType?.('audio/mp4; codecs="mp4a.40.2"') === '';
       const hint = missingAac ? ' This browser does not support AAC; the MP4 audio track may be unavailable.' :
         ' Check source channels and browser codec support.';
-      this.report(new Error(`Web Audio exposes ${data.channelCount} channels; 4 are required. PowerMap and binaural audio disabled.${hint}`));
+      this.report(new Error(`Web Audio exposes ${data.channelCount} channels; 4 (FOA) or 6 (FOA+HL) are required. PowerMap and binaural audio disabled.${hint}`));
       return;
     }
     if (data.type !== 'frame') return;
-    this.channelCount = 4; this.ready = true; this.state = 'ready'; this.applyGain();
+    this.channelCount = data.channelCount ?? 4; this.ready = true; this.state = 'ready'; this.applyGain();
     if (!this.enabled || !this.service || this.video.paused || this.video.seeking) return;
     const generation = this.generation;
     const time = this.video.currentTime;
@@ -235,6 +238,7 @@ export class FoaMonitor {
     if (this.fallback) this.fallback.gain.value = this.bypass || !this.ready ? volume : 0;
     if (this.output) this.output.gain.value = this.ready && this.mode === 'binaural' ? volume : 0;
     if (this.stereo) this.stereo.gain.value = this.ready && this.mode === 'stereo' ? volume : 0;
+    if (this.headlocked) this.headlocked.gain.value = this.ready && this.channelCount === 6 ? volume : 0;
   }
   async resume() { await this.prepare(); await this.context?.resume(); }
   async selectAudioTrack(index) {
@@ -252,7 +256,7 @@ export class FoaMonitor {
       if (this.meterNode) this.meterNode.port.onmessage = null;
       await this.context?.close();
       if (this.disposed) return;
-      for (const key of ['context', 'source', 'renderer', 'capture', 'output', 'fallback', 'stereo',
+      for (const key of ['context', 'source', 'renderer', 'capture', 'output', 'fallback', 'stereo', 'headlocked',
         'service', 'mapLoading', 'meterInput', 'meterNode', 'meterLoading', 'initialized']) this[key] = undefined;
       this.ready = this.bypass = this.noAudio = false;
       this.channelCount = null; this.state = 'initializing'; this.meterStatus = 'off';

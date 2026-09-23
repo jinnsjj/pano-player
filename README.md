@@ -37,6 +37,8 @@ Review 180° and 360° video with four-channel first-order Ambisonics (FOA), cam
 
 **Binaural monitoring** uses Omnitone to render FOA for headphones. Turning the Perspective camera changes your listening direction. **Stereo Monitor** keeps the mix aligned to the recording axes.
 
+**FOA+HL** treats six-channel audio as four FOA channels followed by head-locked left/right (channels 5/6). HL is mixed into both Binaural and Stereo Monitor without camera rotation or FOA normalization, follows volume/mute, and is excluded from PowerMap. Six-channel speaker-layout audio such as 5.1 is not supported as surround audio.
+
 Choose **WYZX / WXYZ** channel order and **SN3D / N3D** normalization independently, without reopening the file.
 
 > Four channels do not automatically mean FOA. Spatial processing expects first-order Ambisonics, not ordinary quadraphonic speaker audio. PowerMap is for qualitative direction review; the MUSIC source count is an assumption, not automatic detection. It is not a calibrated sound-pressure measurement or source-separation tool.
@@ -101,7 +103,7 @@ Videos without an audio track also play in both views, with seeking and replay. 
 - **No extra decoder setup**: no user-installed FFmpeg, FFprobe, Python, server, or port forwarding.
 - **Source files stay unchanged**, and media is not uploaded to third-party processing services.
 
-For media with multiple audio tracks, choose **Audio > Track**. Track names, languages, channel counts and codecs help identify each track. Switching retains the playback position and play/pause state; channel counts other than four use Bypass and four-channel FOA tracks use spatial processing. Each file starts with its primary supported audio track; track selection is not saved across files.
+For media with multiple audio tracks, choose **Audio > Track**. Track names, languages, channel counts and codecs help identify each track. Switching retains the playback position and play/pause state; four-channel FOA and six-channel FOA+HL tracks use spatial processing, and other channel counts use Bypass. Each file starts with its primary supported audio track; track selection is not saved across files.
 
 The seek bar shows a separate envelope for every decoded source channel, generated progressively in the background. Rows adapt to the channel count within the existing control-bar height; changing tracks replaces the envelope. A shared square-root amplitude scale keeps quieter channels visible without normalizing each channel independently.
 

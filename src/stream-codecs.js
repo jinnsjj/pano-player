@@ -5,21 +5,52 @@ let webmOpus = false;
 let firstSequence = -1;
 export function setWebmOpusTiming(value, sequence = -1) { webmOpus = value; firstSequence = sequence; }
 
+async function openAacDecoder(config) {
+  const description = config.description;
+  if (!description?.byteLength) throw new Error('Missing audio codec header.');
+  const bytes = description instanceof ArrayBuffer ? new Uint8Array(description) :
+    new Uint8Array(description.buffer, description.byteOffset, description.byteLength);
+  const libav = await globalThis.LibAV.LibAV({ noworker: true, ...globalThis.foaLibavOptions });
+  let decoder;
+  try {
+    decoder = await libav.ff_init_decoder('aac', {
+      codecpar: { extradata: bytes, sample_rate: config.sampleRate, channels: config.numberOfChannels },
+      time_base: [1, config.sampleRate],
+    });
+    // AAC PCE can override the channel count advertised by the MP4 sample entry.
+    const channels = await libav.AVCodecContext_channels(decoder[1]);
+    if (!Number.isInteger(channels) || channels <= 0) throw new Error('Invalid AAC channel count.');
+    return { libav, decoder, channels };
+  } catch (error) {
+    try { if (decoder) await libav.ff_free_decoder(...decoder.slice(1)); }
+    finally { libav.terminate(); }
+    throw error;
+  }
+}
+
+export async function getAacChannelCount(config) {
+  const { libav, decoder, channels } = await openAacDecoder(config);
+  try { return channels; }
+  finally {
+    try { await libav.ff_free_decoder(...decoder.slice(1)); }
+    finally { libav.terminate(); }
+  }
+}
+
 export class FoaAudioDecoder extends CustomAudioDecoder {
   static supports(codec, config) {
     return Number.isInteger(config.numberOfChannels) && config.numberOfChannels > 0 && ['aac', 'opus'].includes(codec);
   }
   async init() {
+    this.numberOfChannels = this.config.numberOfChannels;
     const description = this.config.description;
     if (!description?.byteLength) throw new Error('Missing audio codec header.');
     const bytes = description instanceof ArrayBuffer ? new Uint8Array(description) :
       new Uint8Array(description.buffer, description.byteOffset, description.byteLength);
     if (this.codec === 'aac') {
-      this.libav = await globalThis.LibAV.LibAV({ noworker: true, ...globalThis.foaLibavOptions });
-      this.decoder = await this.libav.ff_init_decoder('aac', {
-        codecpar: { extradata: bytes, sample_rate: this.config.sampleRate, channels: this.config.numberOfChannels },
-        time_base: [1, this.config.sampleRate],
-      });
+      const initialized = await openAacDecoder(this.config);
+      this.libav = initialized.libav; this.decoder = initialized.decoder;
+      this.numberOfChannels = initialized.channels;
     } else {
       const channels = this.config.numberOfChannels;
       if (bytes.length < 19 || String.fromCharCode(...bytes.subarray(0, 8)) !== 'OpusHead' || bytes[9] !== channels) {
@@ -70,8 +101,9 @@ export class FoaAudioDecoder extends CustomAudioDecoder {
     if (channels[0].length) this.output(channels, rate, packet.timestamp - this.delay + this.packetSkip);
   }
   output(channels, rate, timestamp) {
-    if (channels.length !== this.config.numberOfChannels || channels.some(channel => !(channel instanceof Float32Array)
-        || channel.length !== channels[0].length)) throw new Error('Audio decoder did not preserve the source PCM channels.');
+    if (channels.length !== this.numberOfChannels || channels.some(channel => !(channel instanceof Float32Array)
+        || channel.length !== channels[0].length)) throw new Error(
+      `Audio decoder did not preserve the source PCM channels (expected ${this.numberOfChannels}, received ${channels.length}).`);
     const data = new Float32Array(channels[0].length * channels.length);
     channels.forEach((channel, i) => data.set(channel, i * channel.length));
     this.onSample(new AudioSample({ data, format: 'f32-planar', numberOfChannels: channels.length,

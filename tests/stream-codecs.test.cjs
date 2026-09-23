@@ -5,6 +5,28 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const { build } = require('esbuild');
 
+test('AAC PCE overrides a stereo container count without relaxing PCM validation', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pano-player-pce-'));
+  let decoder;
+  try {
+    const output = path.join(dir, 'decode.cjs');
+    await build({ entryPoints: [require.resolve('../src/stream-codecs.js')], bundle: true,
+      platform: 'node', format: 'cjs', outfile: output });
+    globalThis.LibAV = require('../media/libav-6.10.7.1.5-decoder-aac.js');
+    const { getAacChannelCount, FoaAudioDecoder } = require(output);
+    const config = { numberOfChannels: 2, sampleRate: 44100,
+      description: Uint8Array.from(Buffer.from('1200050844002008840d4c61766335392e33372e31303056e500', 'hex')) };
+    assert.equal(await getAacChannelCount(config), 6);
+    assert.equal(config.numberOfChannels, 2, 'Do not mutate the demuxer config');
+    decoder = new FoaAudioDecoder(); decoder.codec = 'aac'; decoder.config = config;
+    decoder.onSample = sample => { assert.equal(sample.numberOfChannels, 6); sample.close(); };
+    await decoder.init();
+    decoder.output(Array.from({ length: 6 }, () => new Float32Array(1024)), 44100, 0);
+    assert.throws(() => decoder.output([new Float32Array(1024), new Float32Array(1024)], 44100, 0), /expected 6, received 2/);
+    assert.throws(() => decoder.output(Array.from({ length: 6 }, (_, i) => new Float32Array(i ? 1024 : 1)), 44100, 0), /preserve/);
+  } finally { await decoder?.close(); await fs.rm(dir, { recursive: true, force: true }); }
+});
+
 test('bundled decoder preserves original mono, stereo and FOA PCM', async t => {
   const files = process.env.PANO_PLAYER_CODEC_FILES?.split('|');
   if (!files) { t.skip('Set PANO_PLAYER_CODEC_FILES to original MP4 and WebM paths.'); return; }
@@ -15,7 +37,7 @@ test('bundled decoder preserves original mono, stereo and FOA PCM', async t => {
     await build({ stdin: { contents: `export * from '${root}/src/stream-codecs.js'; export * from 'mediabunny';`,
       resolveDir: root }, bundle: true, platform: 'node', format: 'cjs', minify: true, outfile: output });
     globalThis.LibAV = require(path.join(root, 'media/libav-6.10.7.1.5-decoder-aac.js'));
-    const { Input, CustomSource, ALL_FORMATS, AudioSampleSink, EncodedPacketSink, setWebmOpusTiming } = require(output);
+    const { Input, CustomSource, ALL_FORMATS, AudioSampleSink, EncodedPacketSink, setWebmOpusTiming, getAacChannelCount } = require(output);
     for (const file of files) {
       const handle = await fs.open(file); const size = (await handle.stat()).size;
       let bytes = 0;
@@ -30,7 +52,7 @@ test('bundled decoder preserves original mono, stereo and FOA PCM', async t => {
         const config = await track.getDecoderConfig();
         setWebmOpusTiming(['WebM', 'Matroska'].includes((await input.getFormat()).name),
           (await new EncodedPacketSink(track).getFirstPacket({ metadataOnly: true }))?.sequenceNumber);
-        const channels = config.numberOfChannels;
+        const channels = track.codec === 'aac' ? await getAacChannelCount(config) : config.numberOfChannels;
         assert.ok(Number.isInteger(channels) && channels > 0);
         const planes = Array.from({ length: channels }, () => []); let frames = 0;
         const start = performance.now();
