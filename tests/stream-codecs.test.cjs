@@ -31,7 +31,7 @@ test('bundled decoder preserves original mono, stereo and FOA PCM', async t => {
         setWebmOpusTiming(['WebM', 'Matroska'].includes((await input.getFormat()).name),
           (await new EncodedPacketSink(track).getFirstPacket({ metadataOnly: true }))?.sequenceNumber);
         const channels = config.numberOfChannels;
-        assert.ok([1, 2, 4].includes(channels));
+        assert.ok(Number.isInteger(channels) && channels > 0);
         const planes = Array.from({ length: channels }, () => []); let frames = 0;
         const start = performance.now();
         for await (const sample of new AudioSampleSink(track).samples(-.12, 2)) {

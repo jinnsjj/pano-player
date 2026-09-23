@@ -7,7 +7,7 @@ export function setWebmOpusTiming(value, sequence = -1) { webmOpus = value; firs
 
 export class FoaAudioDecoder extends CustomAudioDecoder {
   static supports(codec, config) {
-    return [1, 2, 4].includes(config.numberOfChannels) && ['aac', 'opus'].includes(codec);
+    return Number.isInteger(config.numberOfChannels) && config.numberOfChannels > 0 && ['aac', 'opus'].includes(codec);
   }
   async init() {
     const description = this.config.description;

@@ -39,8 +39,8 @@ test('track switching rebuilds audio routes, clears analysis and preserves prefe
     await assert.rejects(m.selectAudioTrack(-1), /Unsupported/);
   }
 });
-test('mono/stereo attach straight to gain without initializing FOA DSP and remain camera-independent', async () => {
-  for (const channels of [1, 2]) {
+test('non-FOA channel counts attach straight to gain without initializing FOA DSP and remain camera-independent', async () => {
+  for (const channels of [1, 2, 3, 6, 8, 16, 32]) {
     const { m, video, errors } = monitor({ AudioContext: class {
       createGain() { return { gain: {}, connections: [], connect(node) { this.connections.push(node); } }; }
       async resume() {} async suspend() {}

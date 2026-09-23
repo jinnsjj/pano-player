@@ -3,7 +3,7 @@ class WavStreamProcessor extends AudioWorkletProcessor {
     super();
     const config = options?.processorOptions ?? {};
     this.channels = config.channels ?? 4;
-    if (![1, 2, 4].includes(this.channels)) throw new Error('Unsupported PCM channel count.');
+    if (!Number.isInteger(this.channels) || this.channels < 1 || this.channels > 32) throw new Error('Unsupported PCM channel count.');
     this.sourceSampleRate = Math.max(1, Number(config.sourceSampleRate) || sampleRate);
     this.outputSampleRate = sampleRate;
     this.ratio = this.sourceSampleRate / this.outputSampleRate;

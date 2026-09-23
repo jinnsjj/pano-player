@@ -11,6 +11,7 @@ test('track reload preserves time, releases old PCM and ignores stale worker mes
   vm.runInNewContext(bundle, context);
   const { StreamPlayer } = context.module.exports;
   StreamPlayer.prototype.load = () => {};
+  StreamPlayer.prototype.startEnvelope = () => {};
   const player = new StreamPlayer({ dataset: {} });
   let terminated = 0, disconnected = 0, closed = 0;
   player.worker = { terminate() { terminated++; } };
@@ -46,6 +47,7 @@ test('stream player closes stale frames, preserves seek epochs and bounds PCM pr
   vm.runInNewContext(bundle, context);
   const { StreamPlayer } = context.module.exports;
   StreamPlayer.prototype.load = () => {};
+  StreamPlayer.prototype.startEnvelope = () => {};
   let drawn = 0, closed = 0;
   const player = new StreamPlayer({ dataset: {}, getContext: () => ({ drawImage() { drawn++; } }) });
   const messages = [];

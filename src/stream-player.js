@@ -26,7 +26,8 @@ export class StreamPlayer extends EventTarget {
     try {
       const response = await fetch(this.dataset.decoder, { signal: this.abort.signal });
       if (!response.ok) throw new Error(`Cannot load bundled decoder (${response.status}).`);
-      const url = URL.createObjectURL(new Blob([await response.text()], { type: 'text/javascript' }));
+      this.decoderSource = await response.text();
+      const url = URL.createObjectURL(new Blob([this.decoderSource], { type: 'text/javascript' }));
       if (this.disposed) { URL.revokeObjectURL(url); return; }
       this.worker = new Worker(url); URL.revokeObjectURL(url);
       this.worker.onerror = event => this.fail(new Error(event.message));
@@ -35,6 +36,30 @@ export class StreamPlayer extends EventTarget {
         epoch: this.epoch, audioTrackIndex: this.audioTrackIndex, time: this.time,
         libav: new URL('libav-6.10.7.1.5-decoder-aac.js', this.dataset.decoder).href });
     } catch (error) { this.fail(error); }
+  }
+  startEnvelope() {
+    if (!this.channels || !Number.isFinite(this.duration) || this.duration <= 0) return;
+    const url = URL.createObjectURL(new Blob([this.decoderSource], { type: 'text/javascript' }));
+    const worker = this.envelopeWorker = new Worker(url); URL.revokeObjectURL(url);
+    const abort = this.envelopeAbort = new AbortController();
+    const finish = () => { worker.terminate(); abort.abort(); };
+    worker.onerror = finish;
+    worker.onmessage = ({ data }) => {
+      if (this.disposed || this.envelopeWorker !== worker) { data.port?.close(); return; }
+      if (data.type === 'fetch') {
+        void serveResource(data.port, data.url, data.init, abort.signal, this.fetchResource);
+      } else if (data.type === 'envelope') {
+        this.envelope = data.channels; this.emit('envelope');
+        if (data.done) finish();
+      } else if (data.type === 'error') finish();
+    };
+    worker.postMessage({ type: 'open', envelope: true, url: this.dataset.source,
+      audioTrackIndex: this.audioTrackIndex,
+      libav: new URL('libav-6.10.7.1.5-decoder-aac.js', this.dataset.decoder).href });
+  }
+  clearEnvelope() {
+    this.envelopeWorker?.terminate(); this.envelopeWorker = undefined;
+    this.envelopeAbort?.abort(); this.envelope = undefined; this.emit('envelope');
   }
   receive(data) {
     if (data.type === 'fetch') {
@@ -51,6 +76,7 @@ export class StreamPlayer extends EventTarget {
       this.element.width = Math.max(1, data.width); this.element.height = Math.max(1, data.height);
       this.codec = data.codec; this.readyState = 1; this.metadataReady(); this.emit('loadedmetadata');
       this.requestVideo();
+      try { this.startEnvelope(); } catch { this.clearEnvelope(); }
     } else if (data.type === 'audio') {
       this.audioPending = false; this.endFrame = data.endFrame; this.eof = data.eof;
       this.node.port.postMessage({ type: 'chunk', channels: data.channels, epoch: this.epoch }, data.channels.map(channel => channel.buffer));
@@ -68,6 +94,7 @@ export class StreamPlayer extends EventTarget {
   async attach(context, destination) {
     await this.metadata;
     if (this.channels === 0) return;
+    if (this.channels > 32) throw new Error(`Playback exceeds the browser's 32-channel limit (${this.channels} channels). The audio envelope is still available.`);
     this.context = context;
     const response = await fetch(this.dataset.pcm, { signal: this.abort.signal });
     if (!response.ok) throw new Error('Cannot load PCM audio worklet.');
@@ -99,6 +126,7 @@ export class StreamPlayer extends EventTarget {
   async selectAudioTrack(index) {
     if (!Number.isInteger(index) || !this.audioTracks?.[index]?.supported) throw new Error('Unsupported audio track.');
     this.pause();
+    this.clearEnvelope();
     this.worker?.terminate(); this.node?.disconnect();
     if (this.node) this.node.port.onmessage = null;
     this.node = undefined; this.context = undefined;
@@ -187,6 +215,7 @@ export class StreamPlayer extends EventTarget {
   getVideoPlaybackQuality() { return { totalVideoFrames: this.frames, droppedVideoFrames: this.dropped }; }
   dispose() {
     this.disposed = true; this.abort.abort(); this.worker?.terminate();
+    this.clearEnvelope();
     this.nextFrame?.frame.close(); this.node?.disconnect();
     if (this.node) this.node.port.onmessage = null;
   }

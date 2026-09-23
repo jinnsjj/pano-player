@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 test('worker enumerates audio tracks, selects by index and rejects unsupported selections', async () => {
-  const tracks = [6, 2, 4].map((channels, index) => ({ codec: 'flac',
+  const tracks = [0, 6, 16].map((channels, index) => ({ codec: 'flac',
     getDecoderConfig: async () => ({ numberOfChannels: channels, sampleRate: index === 1 ? 44100 : 48000 }),
     getName: async () => ['Surround', 'Stereo', 'FOA'][index], getLanguageCode: async () => 'eng',
   }));
@@ -32,7 +32,7 @@ test('worker enumerates audio tracks, selects by index and rejects unsupported s
     if (selected === undefined || selected === 2) {
       const index = selected ?? 1;
       assert.equal(result.type, 'metadata'); assert.equal(result.audioTrackIndex, index);
-      assert.equal(result.channels, index === 1 ? 2 : 4);
+      assert.equal(result.channels, index === 1 ? 6 : 16);
       assert.equal(result.sampleRate, index === 1 ? 44100 : 48000);
       assert.equal(result.audioTracks[0].supported, false);
       assert.equal(result.audioTracks[2].name, 'FOA');
