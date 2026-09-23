@@ -140,15 +140,15 @@ test('native controls and playback do not await a stalled DSP initializer', () =
   assert.match(s.get('detail').textContent, /Worker unavailable/);
   assert.ok(s.messages.every(message => message.type === 'diagnostic'));
 });
-test('all sliders suppress pointer focus rings and restore keyboard focus without blurring', () => {
+test('sliders and dropdowns suppress pointer focus rings and restore keyboard focus without blurring', () => {
   const s = setup();
-  for (const id of ['seek', 'volume', 'opacity', 'gridOpacity']) {
-    const slider = s.get(id);
-    slider.blur = () => { throw new Error('Pointer interaction must retain slider focus'); };
-    slider.fire('pointerdown'); assert.equal(slider.dataset.pointerFocus, '');
-    slider.fire('keydown'); assert.equal(slider.dataset.pointerFocus, undefined);
-    slider.fire('pointerdown'); slider.fire('blur');
-    assert.equal(slider.dataset.pointerFocus, undefined);
+  for (const id of ['seek', 'volume', 'opacity', 'gridOpacity', 'projection', 'layout', 'rotation', 'mapAlgorithm', 'mapSources', 'audio-track', 'listening', 'order', 'normalization']) {
+    const control = s.get(id);
+    control.blur = () => { throw new Error('Pointer interaction must retain control focus'); };
+    control.fire('pointerdown'); assert.equal(control.dataset.pointerFocus, '');
+    control.fire('keydown'); assert.equal(control.dataset.pointerFocus, undefined);
+    control.fire('pointerdown'); control.fire('blur');
+    assert.equal(control.dataset.pointerFocus, undefined);
   }
 });
 test('panorama overview is an independent persisted overlay available in Perspective', () => {

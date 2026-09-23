@@ -71,7 +71,7 @@ button svg { width: 18px; height: 18px; }
 #play:hover:not(:disabled) { filter: brightness(1.12); }
 #play:active:not(:disabled) { filter: brightness(.9); }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, #spatial:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
-input[type=range][data-pointer-focus] { outline: none; }
+input[type=range][data-pointer-focus], select[data-pointer-focus] { outline: none; }
 #spatial:focus-visible { outline-offset: -3px; }
 #time { flex: none; min-width: 106px; font: 12px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
 #seek { flex: 1; min-width: 40px; }

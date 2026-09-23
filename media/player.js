@@ -250,10 +250,10 @@ import { FloatingOverlay } from './floating-overlay.js';
     }
   });
   $('seek').addEventListener('input', () => { video.currentTime = Number($('seek').value); });
-  for (const id of ['seek', 'volume', 'opacity', 'gridOpacity']) {
-    const slider = $(id);
-    slider.addEventListener('pointerdown', () => { slider.dataset.pointerFocus = ''; });
-    for (const type of ['keydown', 'blur']) slider.addEventListener(type, () => { delete slider.dataset.pointerFocus; });
+  for (const id of ['seek', 'volume', 'opacity', 'gridOpacity', 'projection', 'layout', 'rotation', 'mapAlgorithm', 'mapSources', 'audio-track', 'listening', 'order', 'normalization']) {
+    const control = $(id);
+    control.addEventListener('pointerdown', () => { control.dataset.pointerFocus = ''; });
+    for (const type of ['keydown', 'blur']) control.addEventListener(type, () => { delete control.dataset.pointerFocus; });
   }
   $('volume').addEventListener('input', () => { monitor.setVolume(Number($('volume').value)); level('volume'); persist({ volume: Number($('volume').value) }); });
   $('mute').addEventListener('click', () => {
