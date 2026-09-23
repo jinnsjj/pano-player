@@ -150,8 +150,9 @@ import { attachEnvelope } from './envelope.js';
     else {
       if (video.channels) items.push(video.channels + 'ch');
       if (video.sampleRate > 0) items.push((video.sampleRate / 1000) + ' kHz');
-      if (video.channels !== 4) items.push('Bypass');
+      if (![4, 6].includes(video.channels)) items.push('Bypass');
       else {
+        if (video.channels === 6) items.push('FOA+HL');
         items.push(monitor.order + ' / ' + monitor.normalization, monitor.ready ? monitor.mode : 'initializing spatial audio');
         items.push('PowerMap' + ($('enabled').checked ? '' : ' off') + ': ' + preferences.mapAlgorithm.toUpperCase());
         if (preferences.mapAlgorithm === 'music') items.push(preferences.mapSources + (preferences.mapSources === 1 ? ' source' : ' sources'));
@@ -185,7 +186,7 @@ import { attachEnvelope } from './envelope.js';
     }));
     $('audio-track').value = String(video.audioTrackIndex);
     $('audio-track').title = $('audio-track').selectedOptions[0]?.textContent ?? '';
-    const bypass = video.channels > 0 && video.channels !== 4;
+    const bypass = video.channels > 0 && ![4, 6].includes(video.channels);
     const noAudio = video.channels === 0;
     for (const id of ['enabled', 'opacity', 'order', 'normalization', 'listening']) $(id).disabled = bypass || noAudio;
     updateMapControls();
@@ -278,7 +279,7 @@ import { attachEnvelope } from './envelope.js';
   });
   $('enabled').addEventListener('change', () => { monitor.setEnabled($('enabled').checked); lastMap = null; clear(); persist({ enabled: $('enabled').checked }); updateDetail(); });
   function updateMapControls() {
-    $('mapAlgorithm').disabled = video.channels !== 4;
+    $('mapAlgorithm').disabled = ![4, 6].includes(video.channels);
     $('mapSources').disabled = $('mapAlgorithm').disabled || $('mapAlgorithm').value !== 'music';
   }
   for (const id of ['mapAlgorithm', 'mapSources']) $(id).addEventListener('change', () => {

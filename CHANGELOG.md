@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.31 - 2026-09-23
+
+### Fixed
+
+- Read AAC channel counts from the codec header before configuring playback, so six-channel FOA+HL files with PCE layouts are not mistaken for stereo. Keep decoded PCM channel validation enabled.
+
+## 0.4.30 - 2026-09-23
+
+### Added
+
+- Six-channel FOA+HL playback: channels 1-4 carry FOA and channels 5/6 carry head-locked left/right audio in both listening modes, with shared volume and mute. HL is excluded from camera rotation, FOA normalization and PowerMap.
+
+### Fixed
+
+- Suppress false PowerMap hotspots and clear stale maps for silent, W-only and near-W-only input.
+- Preserve flat spectra through interpolation and normalization, and prevent two-source MUSIC from using zero-energy signal directions.
+
 ## 0.4.29 - 2026-09-23
 
 ### Fixed

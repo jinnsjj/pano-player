@@ -7,6 +7,9 @@ export const SCAN_FREQUENCY = 9;
 
 const ROOT_THREE = Math.sqrt(3);
 const MUSIC_EPSILON = 2.23e-10;
+const ENERGY_FLOOR = 1e-12;
+const DIRECTION_ENERGY_RATIO = 1e-6;
+const MAP_RELATIVE_TOLERANCE = 1e-6;
 const HANN_WINDOW = Float32Array.from(
   { length: FRAME_SIZE },
   (_, index) => 0.5 - 0.5 * Math.cos(2 * Math.PI * index / (FRAME_SIZE - 1)),
@@ -303,7 +306,7 @@ export function normalizeMap(values) {
   }
   const normalized = new Float32Array(values.length);
   const range = maximum - minimum;
-  if (range <= 1e-12) {
+  if (range <= 1e-12 + MAP_RELATIVE_TOLERANCE * Math.max(Math.abs(minimum), Math.abs(maximum))) {
     return normalized;
   }
   for (let index = 0; index < values.length; index += 1) {
@@ -389,7 +392,12 @@ export function analyzeFoaWindow({
 
   const rawSpectrum = new Float64Array(scanSize);
   const trace = covariance[0] + covariance[5] + covariance[10] + covariance[15];
-  if (trace > 1e-12 && options.algorithm === 'pwd') {
+  const directionalEnergy = covariance[5] + covariance[10] + covariance[15];
+  // W-only frames have no direction; discard history as well as the current map.
+  if (trace <= ENERGY_FLOOR || directionalEnergy <= DIRECTION_ENERGY_RATIO * trace) {
+    return { map: new Float32Array(interpolationIndices.length / 3), spectrum: rawSpectrum };
+  }
+  if (options.algorithm === 'pwd') {
     // PWD beam energy Y^T C Y; the map is normalized for display below.
     for (let i = 0; i < scanSize; i += 1) {
       let energy = 0;
@@ -400,13 +408,15 @@ export function analyzeFoaWindow({
       }
       rawSpectrum[i] = Math.max(0, energy);
     }
-  } else if (trace > 1e-12) {
-    const { vectors } = jacobiEigenSymmetric4(covariance);
+  } else {
+    const { values, vectors } = jacobiEigenSymmetric4(covariance.map(value => value / trace));
+    // Do not promote arbitrary null-space vectors to sources in rank-deficient input.
+    const sourceCount = Math.min(options.numSources, values.filter(value => value > DIRECTION_ENERGY_RATIO).length);
     for (let scanIndex = 0; scanIndex < scanSize; scanIndex += 1) {
       let denominator = 0;
       for (
         let noiseColumn = 0;
-        noiseColumn < 4 - options.numSources;
+        noiseColumn < 4 - sourceCount;
         noiseColumn += 1
       ) {
         let projection = 0;
@@ -428,12 +438,14 @@ export function analyzeFoaWindow({
   const interpolated = new Float64Array(interpolationIndices.length / 3);
   for (let gridIndex = 0; gridIndex < interpolated.length; gridIndex += 1) {
     const offset = gridIndex * 3;
-    interpolated[gridIndex] = spectrum[interpolationIndices[offset]]
+    const weightSum = interpolationWeights[offset] + interpolationWeights[offset + 1]
+      + interpolationWeights[offset + 2];
+    interpolated[gridIndex] = (spectrum[interpolationIndices[offset]]
       * interpolationWeights[offset]
       + spectrum[interpolationIndices[offset + 1]]
       * interpolationWeights[offset + 1]
       + spectrum[interpolationIndices[offset + 2]]
-      * interpolationWeights[offset + 2];
+      * interpolationWeights[offset + 2]) / weightSum;
   }
   return {
     map: normalizeMap(interpolated),

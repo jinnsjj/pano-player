@@ -1,5 +1,5 @@
 import { Input, UrlSource, ALL_FORMATS, AudioSampleSink, VideoSampleSink, EncodedPacketSink } from 'mediabunny';
-import { setWebmOpusTiming } from './stream-codecs.js';
+import { getAacChannelCount, setWebmOpusTiming } from './stream-codecs.js';
 import { resourceFetch } from './resource-fetch.js';
 import { scanEnvelope } from './envelope.js';
 
@@ -55,7 +55,8 @@ async function open(url, libav, selectedTrack, time = 0, envelope = false) {
   const first = webm && audioTrack?.codec === 'opus' ? await new EncodedPacketSink(audioTrack).getFirstPacket({ metadataOnly: true }) : null;
   setWebmOpusTiming(webm, first?.sequenceNumber);
   if (audioTrack && (!Number.isInteger(config?.numberOfChannels) || config.numberOfChannels <= 0)) throw new Error('Invalid audio channel count.');
-  channelCount = config?.numberOfChannels ?? 0;
+  channelCount = audioTrack?.codec === 'aac' ? await getAacChannelCount(config) : config?.numberOfChannels ?? 0;
+  if (audioTrack) audioTracks[audioTrackIndex].channels = channelCount;
   rate = config?.sampleRate ?? 0;
   const videoConfig = await videoTrack?.getDecoderConfig();
   audioSink = audioTrack ? new AudioSampleSink(audioTrack) : undefined;

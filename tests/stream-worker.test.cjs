@@ -70,3 +70,31 @@ test('video-only worker opens and serves frames without audio decoders', async (
   await new Promise(setImmediate);
   assert.equal(sent.at(-1).time, 1); assert.equal(sent.at(-1).epoch, 1);
 });
+
+test('AAC metadata and envelope use the decoder header channel count before playback', async () => {
+  for (const envelope of [false, true]) {
+    const sent = [], self = {};
+    const config = { numberOfChannels: 2, sampleRate: 44100 };
+    const track = { codec: 'aac', getDecoderConfig: async () => config,
+      getName: async () => '', getLanguageCode: async () => 'und' };
+    const source = fs.readFileSync(require.resolve('../src/stream-worker.js'), 'utf8').replace(/^import .*;\n/gm, '');
+    vm.runInNewContext(source, { self, postMessage: data => sent.push(data), Blob, URL, importScripts() {},
+      resourceFetch: async () => ({ ok: true, text: async () => '' }),
+      Input: class {
+        getAudioTracks = async () => [track]; getPrimaryAudioTrack = async () => track;
+        getPrimaryVideoTrack = async () => null; getDurationFromMetadata = async () => 20;
+        getFormat = async () => ({ name: 'MP4' }); dispose() {}
+      }, UrlSource: class {}, ALL_FORMATS: [], setWebmOpusTiming() {},
+      getAacChannelCount: async value => { assert.equal(value, config); return 6; },
+      AudioSampleSink: class { samples() { return { return: async () => {} }; } },
+      scanEnvelope: async (sink, duration, channels) => { assert.equal(channels, 6); sent.push({ type: 'scanned' }); },
+    });
+    self.onmessage({ data: { type: 'open', url: 'test.mp4', libav: 'aac.js', envelope } });
+    await new Promise(setImmediate);
+    assert.equal(sent[0]?.type, envelope ? 'scanned' : 'metadata', JSON.stringify(sent));
+    if (!envelope) {
+      assert.equal(sent[0].channels, 6);
+      assert.equal(sent[0].audioTracks[0].channels, 6);
+    }
+  }
+});

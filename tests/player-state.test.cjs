@@ -231,7 +231,7 @@ test('native metadata infers projection and preserves WAV and arbitrary aspect r
   }
 });
 test('non-FOA channel counts disable FOA controls while retaining Spatial view and transport', () => {
-  for (const channels of [1, 2, 3, 6, 8, 16, 32]) {
+  for (const channels of [1, 2, 3, 8, 16, 32]) {
     const s = setup(), video = s.get('video');
     video.channels = channels; video.currentTime = 4; video.paused = false;
     video.fire('loadedmetadata');
@@ -246,6 +246,18 @@ test('non-FOA channel counts disable FOA controls while retaining Spatial view a
     video.videoWidth = video.videoHeight = 0; video.fire('loadedmetadata');
     assert.equal(s.get('audio-poster').hidden, false);
     assert.equal(s.get('audio-format').textContent, channels === 1 ? 'Mono audio' : channels === 2 ? 'Stereo audio' : channels + '-channel audio');
+  }
+});
+test('six-channel FOA+HL keeps spatial controls and reports its layout across track changes', () => {
+  const s = setup({ enabled: true }), video = s.get('video');
+  for (const channels of [6, 2, 4, 6]) {
+    video.channels = channels; video.fire('loadedmetadata');
+    for (const id of ['enabled', 'opacity', 'order', 'normalization', 'listening', 'mapAlgorithm']) {
+      assert.equal(s.get(id).disabled, channels === 2);
+    }
+    assert.equal(s.get('enabled').checked, channels !== 2);
+    assert.equal(s.get('detail').textContent.includes('FOA+HL'), channels === 6);
+    assert.equal(s.get('detail').textContent.includes('Bypass'), channels === 2);
   }
 });
 test('grid and PowerMap have independent persisted opacities and toggles', () => {

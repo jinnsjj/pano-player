@@ -71,7 +71,7 @@ class FoaCaptureProcessor extends AudioWorkletProcessor {
       frame.set(buffer.subarray(0, this.writeIndex), tailLength);
       return frame;
     });
-    this.port.postMessage({ type: 'frame', channels, epoch: this.epoch }, channels.map((channel) => channel.buffer));
+    this.port.postMessage({ type: 'frame', channels, channelCount: this.channelCount, epoch: this.epoch }, channels.map((channel) => channel.buffer));
     this.framesSinceEmit = 0;
     this.hasEmitted = true;
   }
@@ -80,8 +80,13 @@ class FoaCaptureProcessor extends AudioWorkletProcessor {
     const input = inputs[0] ?? [];
     const output = outputs[0] ?? [];
     this.passThrough(input, output);
+    // HL is discrete L/R, independent of FOA channel order and normalization.
+    for (let channel = 0; channel < (outputs[1]?.length ?? 0); channel++) {
+      if (input.length === 6) outputs[1][channel].set(input[channel + 4]);
+      else outputs[1][channel].fill(0);
+    }
     if (!this.enabled || input.length === 0) return true;
-    if (input.length !== 4) {
+    if (input.length !== 4 && input.length !== 6) {
       if (!this.channelErrorReported) {
         this.port.postMessage({
           type: 'error',
@@ -93,6 +98,8 @@ class FoaCaptureProcessor extends AudioWorkletProcessor {
       }
       return true;
     }
+    if (this.channelCount !== input.length) this.resetBuffer();
+    this.channelCount = input.length;
 
     const quantumLength = input[0].length;
     for (let sample = 0; sample < quantumLength; sample += 1) {

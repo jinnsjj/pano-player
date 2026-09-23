@@ -46,6 +46,47 @@ test('PWD matches time-domain beam energy and MUSIC resolves one or two independ
     assert.ok(math.analyzeFoaWindow(silent).map.every(value => value === 0));
   }
 });
+test('directionless frames clear maps and history on the full display grid', () => {
+  const fullGeometry = math.createPowermapGeometry();
+  for (const [algorithm, numSources] of [['pwd', 1], ['music', 1], ['music', 2]]) {
+    const state = worker.createWorkerState({ geometry: fullGeometry });
+    worker.registerSession(state, { sessionId: 'directionless' });
+    const input = { ...frame(), geometry: fullGeometry, algorithm, numSources, mapAverage: .666 };
+    const process = channels => {
+      worker.queueAnalysis(state, { ...input, channels, sessionId: 'directionless', requestId: 1 });
+      return worker.processPendingAnalysis(state, 'directionless').map;
+    };
+    for (const leakage of [0, 1e-4, null]) {
+      assert.ok(process(input.channels).some(value => value > .9));
+      const channels = input.channels.map((channel, index) => Float32Array.from(channel,
+        value => leakage === null ? 0 : value * (index === 0 ? 1 : leakage)));
+      assert.ok(process(channels).every(value => value === 0), `${algorithm}/${numSources}: leakage ${leakage}`);
+      assert.ok(state.sessions.get('directionless').previousSpectrum.every(value => value === 0));
+      const recovered = process(input.channels);
+      assert.deepEqual(recovered, math.analyzeFoaWindow(input).map);
+    }
+  }
+});
+test('flat-map tolerance, interpolation and MUSIC rank remain stable across input levels', () => {
+  for (const scale of [1e-4, 1, 1e6]) {
+    assert.ok(math.normalizeMap(Float64Array.of(scale, scale * (1 + 5e-8))).every(value => value === 0));
+    assert.equal(math.normalizeMap(Float64Array.of(scale, scale * 2))[1], 1);
+  }
+  for (const algorithm of ['music', 'pwd']) {
+    const input = { ...frame(), algorithm };
+    const reference = math.analyzeFoaWindow(input);
+    const reweighted = { ...geometry, interpolationWeights: Float32Array.from(
+      geometry.interpolationWeights, (value, i) => value * (Math.floor(i / 3) + 1)) };
+    assert.deepEqual(math.analyzeFoaWindow({ ...input, geometry: reweighted }).map, reference.map);
+    for (const scale of [1, 1e-5]) {
+      const channels = input.channels.map(channel => Float32Array.from(channel, value => value * scale));
+      const one = math.analyzeFoaWindow({ ...input, channels });
+      const two = math.analyzeFoaWindow({ ...input, channels, numSources: 2 });
+      assert.deepEqual(two.map, one.map);
+      assert.ok(one.map[0] > .99 && one.map[1] < .1);
+    }
+  }
+});
 test('worker passes algorithm/source options and clears incompatible averaging history', () => {
   const state = worker.createWorkerState({ geometry }); worker.registerSession(state, { sessionId: 'test' });
   for (const [algorithm, numSources] of [['music', 1], ['music', 2], ['pwd', 2], ['music', 2]]) {
