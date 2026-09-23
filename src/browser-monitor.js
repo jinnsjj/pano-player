@@ -52,7 +52,7 @@ export class FoaMonitor {
     this.meterInput.channelCount = 2; this.meterInput.channelCountMode = 'explicit';
     if (this.meterEnabled) void this.prepareMeter();
     if (this.video.attach) {
-      if ([1, 2].includes(this.video.channels)) {
+      if (this.video.channels !== 4) {
         this.bypass = true; this.channelCount = this.video.channels;
         this.fallback = this.context.createGain(); this.fallback.connect(this.context.destination);
         this.fallback.connect(this.meterInput);

@@ -96,14 +96,16 @@ Videos without an audio track also play in both views, with seeking and replay. 
 
 - **Four-channel MP4 + AAC and WebM + Opus** use bundled WASM audio decoders. Playback decodes as data arrives rather than waiting for a whole-file transcode.
 - **MP4, WebM, MOV, MKV, WAV and FLAC** are available in Open With. Playback depends on the codecs inside each file.
-- **FLAC** uses incremental decoding through the host browser's WebCodecs FLAC decoder, preserving 1, 2 or 4 source channels without a whole-file conversion.
+- **FLAC** uses incremental decoding through the host browser's WebCodecs FLAC decoder, preserving the source channels without a whole-file conversion; codec support depends on the host browser.
 - **Local, Remote SSH, and Cloud IDE** media are read from the workspace host, without manually downloading the entire file first.
 - **No extra decoder setup**: no user-installed FFmpeg, FFprobe, Python, server, or port forwarding.
 - **Source files stay unchanged**, and media is not uploaded to third-party processing services.
 
-For media with multiple audio tracks, choose **Audio > Track**. Track names, languages, channel counts and codecs help identify each track. Switching retains the playback position and play/pause state; mono/stereo tracks use Bypass and four-channel FOA tracks use spatial processing. Each file starts with its primary supported audio track; track selection is not saved across files.
+For media with multiple audio tracks, choose **Audio > Track**. Track names, languages, channel counts and codecs help identify each track. Switching retains the playback position and play/pause state; channel counts other than four use Bypass and four-channel FOA tracks use spatial processing. Each file starts with its primary supported audio track; track selection is not saved across files.
 
-Video decoding depends on the host browser's WebCodecs support. Perspective view, EAC, rotation and single-eye cropping require WebGL2. Audio supports 1, 2, or 4 channels; tracks with other channel counts are disabled in the selector. FuMa normalization and arbitrary cube-face layouts are not supported.
+The seek bar shows a separate envelope for every decoded source channel, generated progressively in the background. Rows adapt to the channel count within the existing control-bar height; changing tracks replaces the envelope. A shared square-root amplitude scale keeps quieter channels visible without normalizing each channel independently.
+
+Video decoding depends on the host browser's WebCodecs support. Perspective view, EAC, rotation and single-eye cropping require WebGL2. Audio playback supports up to the browser's 32-channel limit; higher-channel sources can still display envelopes when their codec is supported. Output channel mapping depends on Web Audio and the playback device. FuMa normalization and arbitrary cube-face layouts are not supported.
 
 ## Open Your Media
 

@@ -2,11 +2,13 @@
 import { drawDirectionGrid } from './direction-grid.js';
 import { MeterOverlay } from './meter.js';
 import { FloatingOverlay } from './floating-overlay.js';
+import { attachEnvelope } from './envelope.js';
 (() => {
   'use strict';
   const api = acquireVsCodeApi();
   const $ = id => document.getElementById(id);
   const video = new window.StreamPlayer($('video'), api); const canvas = $('overlay');
+  attachEnvelope(video, $('seek-envelope'));
   const ctx = canvas.getContext('2d');
   const defaults = JSON.parse(video.dataset.defaults);
   let preferences = JSON.parse(video.dataset.preferences);
@@ -148,7 +150,7 @@ import { FloatingOverlay } from './floating-overlay.js';
     else {
       if (video.channels) items.push(video.channels + 'ch');
       if (video.sampleRate > 0) items.push((video.sampleRate / 1000) + ' kHz');
-      if ([1, 2].includes(video.channels)) items.push('Bypass');
+      if (video.channels !== 4) items.push('Bypass');
       else {
         items.push(monitor.order + ' / ' + monitor.normalization, monitor.ready ? monitor.mode : 'initializing spatial audio');
         items.push('PowerMap' + ($('enabled').checked ? '' : ' off') + ': ' + preferences.mapAlgorithm.toUpperCase());
@@ -183,7 +185,7 @@ import { FloatingOverlay } from './floating-overlay.js';
     }));
     $('audio-track').value = String(video.audioTrackIndex);
     $('audio-track').title = $('audio-track').selectedOptions[0]?.textContent ?? '';
-    const bypass = [1, 2].includes(video.channels);
+    const bypass = video.channels > 0 && video.channels !== 4;
     const noAudio = video.channels === 0;
     for (const id of ['enabled', 'opacity', 'order', 'normalization', 'listening']) $(id).disabled = bypass || noAudio;
     updateMapControls();
@@ -200,7 +202,7 @@ import { FloatingOverlay } from './floating-overlay.js';
     }
     hasVideo = video.videoWidth > 0 && video.videoHeight > 0;
     $('audio-poster').hidden = hasVideo || !bypass;
-    $('audio-format').textContent = video.channels === 1 ? 'Mono audio' : 'Stereo audio';
+    $('audio-format').textContent = video.channels === 1 ? 'Mono audio' : video.channels === 2 ? 'Stereo audio' : video.channels + '-channel audio';
     sourceAspect = hasVideo ? video.videoWidth / video.videoHeight : 2;
     $('projection').disabled = $('layout').disabled = $('rotation').disabled = !hasVideo;
     mediaDetail = hasVideo ? video.videoWidth + ' × ' + video.videoHeight : 'Audio';
@@ -276,7 +278,7 @@ import { FloatingOverlay } from './floating-overlay.js';
   });
   $('enabled').addEventListener('change', () => { monitor.setEnabled($('enabled').checked); lastMap = null; clear(); persist({ enabled: $('enabled').checked }); updateDetail(); });
   function updateMapControls() {
-    $('mapAlgorithm').disabled = [0, 1, 2].includes(video.channels);
+    $('mapAlgorithm').disabled = video.channels !== 4;
     $('mapSources').disabled = $('mapAlgorithm').disabled || $('mapAlgorithm').value !== 'music';
   }
   for (const id of ['mapAlgorithm', 'mapSources']) $(id).addEventListener('change', () => {

@@ -230,8 +230,8 @@ test('native metadata infers projection and preserves WAV and arbitrary aspect r
     s.get('opacity').fire('input'); assert.equal(s.persisted().projection, 'auto');
   }
 });
-test('mono/stereo disable FOA controls while retaining Spatial view and transport', () => {
-  for (const channels of [1, 2]) {
+test('non-FOA channel counts disable FOA controls while retaining Spatial view and transport', () => {
+  for (const channels of [1, 2, 3, 6, 8, 16, 32]) {
     const s = setup(), video = s.get('video');
     video.channels = channels; video.currentTime = 4; video.paused = false;
     video.fire('loadedmetadata');
@@ -245,7 +245,7 @@ test('mono/stereo disable FOA controls while retaining Spatial view and transpor
     assert.equal(s.get('play').disabled, false);
     video.videoWidth = video.videoHeight = 0; video.fire('loadedmetadata');
     assert.equal(s.get('audio-poster').hidden, false);
-    assert.equal(s.get('audio-format').textContent, channels === 1 ? 'Mono audio' : 'Stereo audio');
+    assert.equal(s.get('audio-format').textContent, channels === 1 ? 'Mono audio' : channels === 2 ? 'Stereo audio' : channels + '-channel audio');
   }
 });
 test('grid and PowerMap have independent persisted opacities and toggles', () => {

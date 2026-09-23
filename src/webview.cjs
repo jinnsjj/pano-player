@@ -35,7 +35,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
   <div id="transport" role="group" aria-label="Playback controls">
     <button id="play" title="Play" aria-label="Play" disabled><i data-lucide="play" aria-hidden="true"></i></button>
     <output id="time" aria-live="off">0:00 / 0:00</output>
-    <input id="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="Playback position" disabled>
+    <div id="seek-track"><canvas id="seek-envelope" aria-hidden="true"></canvas><input id="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="Playback position" disabled></div>
     <div class="volume-controls"><button id="mute" title="Mute" aria-label="Mute" disabled><i data-lucide="volume-2" aria-hidden="true"></i></button><input id="volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume"><output id="volume-value" aria-hidden="true">100%</output></div>
     <div id="view-options">
         <div role="tablist" aria-label="View mode">

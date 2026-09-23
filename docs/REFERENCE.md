@@ -32,13 +32,14 @@ To use PanoPlayer by default for MP4 and WebM, add these associations to your se
 ## Media And Audio
 
 - Containers: MP4, WebM, MOV, MKV, WAV and FLAC. Playback depends on the contained codecs and browser support.
-- FLAC uses the host WebCodecs decoder through the existing incremental demuxer, preserving 1/2/4 channels. No additional decoder is bundled.
+- FLAC uses the host WebCodecs decoder through the existing incremental demuxer, preserving source channels where the codec is supported. No additional decoder is bundled.
 - MP4/AAC and WebM/Opus audio use bundled WASM decoders; WAV PCM is read incrementally. Playback does not wait for full-file decoding or transcoding.
 - Mono/stereo audio passes through unchanged apart from volume and mute. Panorama and Perspective remain available; FOA processing is disabled.
 - Videos without audio use a video clock and support both views, seeking and replay without initializing audio decoders or DSP.
 - Four-channel input must be first-order Ambisonics, not quadraphonic speaker audio. Select WYZX (ACN) or WXYZ, and SN3D or N3D. Defaults are WYZX/SN3D; FuMa is unsupported.
 - Binaural monitoring follows the camera direction. Stereo Monitor stays aligned to the recording axes. WAV and FLAC can display a standalone PowerMap.
-- For multiple audio tracks, **Audio > Track** selects by name, language, channel count and codec. Switching preserves position and play/pause state, clears meter/PowerMap history and rebuilds the audio route for the selected track. Selection is per open file, not a saved preference. The primary track is selected initially, falling back to the first track with a supported channel count when necessary. Only 1, 2 or 4 channels are supported; other channel counts are disabled.
+- For multiple audio tracks, **Audio > Track** selects by name, language, channel count and codec. Switching preserves position and play/pause state, clears meter/PowerMap history and rebuilds the audio route for the selected track. Selection is per open file, not a saved preference. The primary decodable track is selected initially. Channel counts other than four use Bypass; playback is limited to 32 channels by Web Audio, with output mapping determined by the browser and device.
+- The seek bar displays source-channel peak envelopes in fixed-height adaptive rows. Background decoding retains every channel, including for sources above the playback channel limit when decoding is supported. Display amplitudes use the same square-root scale for all channels; the envelope is replaced on track changes, not on seeks.
 - PowerMap offers PWD or MUSIC with one/two assumed sources for qualitative direction review, not calibrated measurement or source separation.
 
 ## PowerMap

@@ -74,7 +74,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 input[type=range][data-pointer-focus], select[data-pointer-focus] { outline: none; }
 #spatial:focus-visible { outline-offset: -3px; }
 #time { flex: none; min-width: 106px; font: 12px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
-#seek { flex: 1; min-width: 40px; }
+#seek-track { position: relative; flex: 1; min-width: 40px; height: 32px; }
+#seek-envelope { inset: 0 6px; width: calc(100% - 12px); }
+#seek { position: absolute; inset: 0; width: 100%; height: 32px; appearance: none; background: transparent; }
+#seek::-webkit-slider-runnable-track { height: 32px; background: transparent; border-bottom: 1px solid var(--control-border); }
+#seek::-webkit-slider-thumb { appearance: none; width: 12px; height: 32px; border: 1px solid var(--surface); border-radius: 2px; background: var(--accent); }
 .volume-controls { display: flex; align-items: center; gap: 6px; }
 #volume { width: 64px; }
 #volume-value, #opacity-value, #gridOpacity-value { min-width: 4ch; color: var(--muted); font: 12px/1.5 var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
