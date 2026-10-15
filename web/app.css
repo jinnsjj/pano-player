@@ -1,0 +1,41 @@
+body { display: flex; flex-direction: column; height: 100dvh; min-height: 320px; }
+.web-toolbar { gap: 16px; padding: 10px 20px; flex: none; }
+#filename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 12px/1.5 var(--mono); }
+.file-actions { display: flex; gap: 4px; margin-left: auto; flex: none; }
+#project-link { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-height: 36px; flex: none; color: var(--muted); border-radius: 4px; }
+#project-link:hover { color: var(--text); background: var(--hover); }
+#project-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+#open { gap: 8px; padding-inline: 12px; border-color: var(--line); }
+#workspace { display: flex; flex: 1; min-height: 0; width: 100%; max-width: none; }
+#player-frame { display: block; width: 100%; height: 100%; border: 0; }
+#welcome { width: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 20px; background: #101214; }
+#welcome img { object-fit: contain; }
+#welcome h1 { font-size: 24px; font-weight: 600; margin: 0; }
+#empty-open { background: var(--accent); color: var(--on-accent); gap: 10px; padding-inline: 18px; min-height: 42px; }
+#empty-help { gap: 8px; color: var(--muted); }
+#help-dialog { padding: 0; width: min(680px, calc(100% - 24px)); max-height: calc(100dvh - 32px); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); overflow: auto; }
+#help-dialog::backdrop { background: #0009; }
+.help-heading { position: sticky; top: 0; display: flex; align-items: center; gap: 16px; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.help-heading h2 { font-size: 18px; font-weight: 600; margin: 0; }
+#help-close { margin-left: auto; }
+.help-content { padding: 4px 24px 24px; font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.help-content section { margin-top: 24px; }
+.help-content h3 { font-size: 15px; margin: 0 0 8px; color: var(--accent); }
+.help-content p, .help-content dl { margin: 12px 0 0; }
+.help-content ol, .help-content ul { padding-left: 22px; margin: 8px 0; }
+.help-content li + li { margin-top: 8px; }
+.help-content dt { font-weight: 600; margin-top: 12px; }
+.help-content dd { margin: 4px 0 0; color: var(--muted); }
+.help-note { padding-left: 12px; border-left: 2px solid var(--map-accent); color: #e6ccaa; }
+#message { margin: 0; padding: 10px 20px; background: #342921; color: #f2cf9c; border-bottom: 1px solid #785d3d; overflow-wrap: anywhere; flex: none; }
+#drop-target { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: #101214e8; outline: 2px dashed var(--accent); outline-offset: -12px; font-size: 20px; pointer-events: none; }
+@media (max-width: 560px) {
+  .web-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 8px 12px; gap: 6px 12px; }
+  .brand strong { font-size: 15px; }
+  #filename { text-align: right; }
+  .file-actions { grid-column: 1 / -1; gap: 2px; margin-left: 0; }
+  #open { margin-right: auto; }
+  #message { padding: 8px 12px; }
+  .help-content { padding: 4px 16px 20px; }
+  .help-heading { padding: 10px 16px; }
+}

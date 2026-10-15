@@ -28,6 +28,7 @@ To use PanoPlayer by default for MP4 and WebM, add these associations to your se
 | Command Palette title | Command ID |
 | --- | --- |
 | PanoPlayer: Open Media | `panoPlayer.open` |
+| Play with PanoPlayer | `panoPlayer.openPath` |
 
 ## Media And Audio
 

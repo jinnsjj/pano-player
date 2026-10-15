@@ -15,6 +15,10 @@ Review 180° and 360° video with four-channel first-order Ambisonics (FOA), cam
 
 [Get PanoPlayer](https://marketplace.visualstudio.com/items?itemName=shijunjie.pano-player) · [Technical reference](docs/REFERENCE.md) · [Report an issue](https://github.com/jinnsjj/pano-player/issues)
 
+## Local Web Player
+
+A standalone static web player shares the extension's playback, projection, FOA and analysis core. Open or drop a local media file; media stays in the browser. Run `npm ci`, `npm run build:web`, then `npm run preview:web` and open the printed localhost URL. The generated `output/web` directory is also suitable for static hosting on Cloudflare Pages. See [web development and deployment](docs/WEB.md) for requirements, privacy boundaries and Pages settings.
+
 ![PanoPlayer Panorama view showing the ERP direction reference image and current playback controls](docs/images/panorama.jpg)
 
 *Panorama shows the full ERP reference image. View tabs sit in the transport bar; Projection, Overlay, and Audio settings are grouped below it. This silent example has audio and PowerMap controls disabled.*
@@ -95,6 +99,13 @@ Mono and stereo video retain Panorama and Perspective viewing. Audio passes thro
 Videos without an audio track also play in both views, with seeking and replay. Audio and PowerMap controls are disabled without changing your saved audio preferences.
 
 ## Streaming And Remote Media
+
+In a text editor, select an absolute media path and choose **Play with PanoPlayer**
+from the right-click menu. With no selection, the command uses the current line.
+Spaces, Unicode names, and paths wrapped in quotes or backticks are supported.
+Files can be outside the open folder, including mounted network drives. In a remote
+window, paths refer to the remote host, not your local computer. HTTP and SFTP URLs
+are not supported.
 
 - **Four-channel MP4 + AAC and WebM + Opus** use bundled WASM audio decoders. Playback decodes as data arrives rather than waiting for a whole-file transcode.
 - **MP4, WebM, MOV, MKV, WAV and FLAC** are available in Open With. Playback depends on the codecs inside each file.

@@ -3,10 +3,13 @@ import { drawDirectionGrid } from './direction-grid.js';
 import { MeterOverlay } from './meter.js';
 import { FloatingOverlay } from './floating-overlay.js';
 import { attachEnvelope } from './envelope.js';
+import { perspectiveAspects } from './view-settings.js';
+import { attachViewportResize } from './viewport-resize.js';
 (() => {
   'use strict';
   const api = acquireVsCodeApi();
   const $ = id => document.getElementById(id);
+  const disposeViewportResize = attachViewportResize($('stage'), $('viewport-resize'));
   const video = new window.StreamPlayer($('video'), api); const canvas = $('overlay');
   attachEnvelope(video, $('seek-envelope'));
   const ctx = canvas.getContext('2d');
@@ -20,7 +23,7 @@ import { attachEnvelope } from './envelope.js';
   });
   let view; let viewMode = 'flat'; let viewLoading;
   let projector; let projectionLoading; let projectionRequest = 0;
-  let ready = false; let mappedAt = null; let lastMap; let processingIssue = false;
+  let ready = false; let mappedAt = null; let lastMap; let processingIssue = false; let disposed = false;
   let switchingTrack = false;
   let hasVideo = true; let sourceAspect = 2; let mediaDetail = 'Native media';
   $('projection').disabled = $('layout').disabled = $('rotation').disabled = true;
@@ -49,7 +52,7 @@ import { attachEnvelope } from './envelope.js';
     return $('projection').value === 'auto' ? (hasVideo && eyeAspect() >= .9 && eyeAspect() <= 1.1 ? '180' : '360') : $('projection').value;
   }
   function applyPreferences() {
-    for (const id of ['projection', 'layout', 'rotation', 'listening', 'order', 'normalization', 'opacity', 'gridOpacity', 'volume', 'mapAlgorithm', 'mapSources']) $(id).value = preferences[id];
+    for (const id of ['projection', 'layout', 'rotation', 'perspectiveRatio', 'listening', 'order', 'normalization', 'opacity', 'gridOpacity', 'volume', 'mapAlgorithm', 'mapSources']) $(id).value = preferences[id];
     $('enabled').checked = preferences.enabled;
     $('grid').checked = preferences.grid; updateGrid();
     meters.setEnabled(preferences.meter);
@@ -77,16 +80,17 @@ import { attachEnvelope } from './envelope.js';
     const projection = effectiveProjection();
     const halfSphere = hasVideo && projection === '180';
     const style = $('stage').style;
-    style.setProperty('--video-aspect', String(spatial ? 16 / 9 : hasVideo ? projection === 'eac' ? 2 : eyeAspect() * (halfSphere ? 2 : 1) : 2));
+    style.setProperty('--video-aspect', String(spatial ? perspectiveAspects[preferences.perspectiveRatio] ?? perspectiveAspects['4:3'] : hasVideo ? projection === 'eac' ? 2 : eyeAspect() * (halfSphere ? 2 : 1) : 2));
     style.setProperty('--video-left', halfSphere ? '25%' : '0%');
     style.setProperty('--video-width', halfSphere ? '50%' : '100%');
     video.hidden = !hasVideo || spatial || !!video.displayElement; canvas.hidden = spatial;
     $('projected').hidden = !hasVideo || spatial || !video.displayElement;
     $('direction-grid').hidden = spatial || !$('grid').checked;
     $('reset-view').disabled = !spatial;
+    $('perspectiveRatio').disabled = !spatial;
     overview.setAvailable(spatial && !!view);
     view?.setOverviewEnabled(overview.enabled && overview.available);
-    view?.configure(spatial, hasVideo, projection);
+    view?.configure(spatial, hasVideo, projection, preferences.perspectiveRatio);
   }
   function renderProjection() {
     if (video.displayElement && projector?.render(video.frames)) view?.sourceChanged();
@@ -164,6 +168,7 @@ import { attachEnvelope } from './envelope.js';
     if ($('detail').textContent !== text) $('detail').textContent = text;
   }
   function tick(now) {
+    if (disposed) return;
     video.render();
     renderProjection();
     meters.render(now);
@@ -253,7 +258,7 @@ import { attachEnvelope } from './envelope.js';
     }
   });
   $('seek').addEventListener('input', () => { video.currentTime = Number($('seek').value); });
-  for (const id of ['seek', 'volume', 'opacity', 'gridOpacity', 'projection', 'layout', 'rotation', 'mapAlgorithm', 'mapSources', 'audio-track', 'listening', 'order', 'normalization']) {
+  for (const id of ['seek', 'volume', 'opacity', 'gridOpacity', 'projection', 'layout', 'rotation', 'perspectiveRatio', 'mapAlgorithm', 'mapSources', 'audio-track', 'listening', 'order', 'normalization']) {
     const control = $(id);
     control.addEventListener('pointerdown', () => { control.dataset.pointerFocus = ''; });
     for (const type of ['keydown', 'blur']) control.addEventListener(type, () => { delete control.dataset.pointerFocus; });
@@ -304,6 +309,11 @@ import { attachEnvelope } from './envelope.js';
   $('projection').addEventListener('change', () => { persist({ projection: $('projection').value }); void selectProjection(); });
   $('layout').addEventListener('change', () => { persist({ layout: $('layout').value }); void selectProjection(); });
   $('rotation').addEventListener('change', () => { persist({ rotation: $('rotation').value }); void selectProjection(); });
+  $('perspectiveRatio').addEventListener('change', () => {
+    const ratio = $('perspectiveRatio').value;
+    if (!Object.hasOwn(perspectiveAspects, ratio)) return;
+    persist({ perspectiveRatio: ratio }); layoutProjection();
+  });
   $('grid').addEventListener('change', () => { persist({ grid: $('grid').checked }); updateGrid(); });
   $('gridOpacity').addEventListener('input', () => { level('gridOpacity'); persist({ gridOpacity: Number($('gridOpacity').value) }); updateGrid(); });
   async function selectView(mode) {
@@ -311,7 +321,7 @@ import { attachEnvelope } from './envelope.js';
     try {
       if (mode === 'spatial' && !view) {
         if (!window.FoaView) await (viewLoading ||= import(video.dataset.view));
-        if (viewMode !== 'spatial') return;
+        if (disposed || viewMode !== 'spatial') return;
         view = new window.FoaView($('spatial'), video, canvas, monitor, $('direction-grid'), $('overview-content'));
         view.setGridEnabled($('grid').checked);
         view.restore(preferences);
@@ -341,8 +351,13 @@ import { attachEnvelope } from './envelope.js';
   });
   $('retry').addEventListener('click', () => location.reload());
   window.addEventListener('message', ({ data }) => { if (data?.type === 'suspend') video.pause(); });
-  window.addEventListener('pagehide', () => { projectionRequest++; projector?.dispose(); view?.dispose(); monitor.dispose(); });
-  window.__PANO_PLAYER__ = { monitor, get view() { return view; }, getState: () => ({
+  function dispose() {
+    if (disposed) return;
+    disposed = true; disposeViewportResize(); projectionRequest++;
+    projector?.dispose(); view?.dispose(); monitor.dispose();
+  }
+  window.addEventListener('pagehide', dispose);
+  window.__PANO_PLAYER__ = { monitor, dispose, get view() { return view; }, getState: () => ({
     ...stats, ready, generation: monitor.generation, currentTime: video.currentTime, paused: video.paused, mappedAt,
     audioTracks: video.audioTracks, audioTrackIndex: video.audioTrackIndex, switchingTrack,
     projection: hasVideo ? effectiveProjection() : 'audio', projectionMode: $('projection').value, preferences: { ...preferences }, layout: $('layout').value, listening: monitor.getState(), view: view?.getState(),

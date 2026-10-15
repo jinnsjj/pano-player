@@ -1,6 +1,7 @@
 import { Scene, PerspectiveCamera, SphereGeometry, VideoTexture, CanvasTexture,
   MeshBasicMaterial, Mesh, WebGLRenderer, SRGBColorSpace, LinearFilter } from './three.module.js';
 import { viewFootprint } from './view-footprint.js';
+import { perspectiveAspects } from './view-settings.js';
 
 class FoaView {
   constructor(host, video, map, monitor, grid, overviewHost = host) {
@@ -8,7 +9,7 @@ class FoaView {
     this.yaw = 0; this.pitch = 0; this.active = false;
     this.overviewEnabled = true;
     this.scene = new Scene();
-    this.camera = new PerspectiveCamera(72, 2, .1, 100);
+    this.camera = new PerspectiveCamera(85, perspectiveAspects['4:3'], .1, 100);
     this.camera.rotation.order = 'YXZ';
     this.geometry = new SphereGeometry(10, 64, 40);
     this.geometry.scale(-1, 1, 1); this.geometry.rotateY(-Math.PI / 2);
@@ -64,8 +65,9 @@ class FoaView {
       else if (event.key === 'Home') { event.preventDefault(); this.reset(); }
     });
   }
-  configure(active, hasVideo, projection) {
+  configure(active, hasVideo, projection, perspectiveRatio = '4:3') {
     this.active = active; this.host.hidden = !active;
+    this.camera.aspect = perspectiveAspects[perspectiveRatio] ?? perspectiveAspects['4:3'];
     this.background.visible = hasVideo;
     this.videoTexture.repeat.x = projection === '180' ? 2 : 1;
     this.videoTexture.offset.x = projection === '180' ? -.5 : 0;
@@ -93,7 +95,7 @@ class FoaView {
   changed() { this.onChange?.({ yaw: this.yaw, pitch: this.pitch, fov: this.camera.fov }); }
   zoom(fov) { this.camera.fov = Math.max(35, Math.min(110, fov)); this.render(); this.changed(); }
   restore({ yaw, pitch, fov }) { this.camera.fov = fov; this.orient(yaw, pitch); }
-  reset() { this.camera.fov = 72; this.orient(0, 0); this.changed(); }
+  reset() { this.camera.fov = 85; this.orient(0, 0); this.changed(); }
   mapChanged() { this.mapTexture.needsUpdate = true; this.render(); }
   setGridEnabled(enabled) {
     this.grid.visible = enabled; this.gridTexture.needsUpdate = true;
@@ -123,7 +125,11 @@ class FoaView {
     if (width !== this.width || height !== this.height) {
       this.width = width; this.height = height; this.gpu.setSize(width, height, false);
     }
-    this.camera.aspect = width / height; this.camera.updateProjectionMatrix();
+    // Preserve the selected aspect even while the host is resizing.
+    const viewWidth = Math.min(width, height * this.camera.aspect);
+    const viewHeight = Math.min(height, width / this.camera.aspect);
+    this.gpu.setViewport((width - viewWidth) / 2, (height - viewHeight) / 2, viewWidth, viewHeight);
+    this.camera.updateProjectionMatrix();
     this.gpu.render(this.scene, this.camera);
     this.drawThumbnail();
   }

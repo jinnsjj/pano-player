@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#191b1d">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src 'self'; connect-src 'none'; object-src 'none'">
+  <title>PanoPlayer</title>
+  <link rel="icon" href="./media/icon.png">
+  <link rel="stylesheet" href="./media/player.css">
+  <link rel="stylesheet" href="./app.css">
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <header class="web-toolbar">
+    <div class="brand"><img src="./media/icon.png" width="32" height="32" alt=""><strong>PanoPlayer</strong></div>
+    <span id="filename">No media selected</span>
+    <div class="file-actions">
+      <button id="open" title="Open media" aria-label="Open media"><i data-lucide="folder-open" aria-hidden="true"></i><span>Open</span></button>
+      <button id="close" title="Close media" aria-label="Close media" disabled><i data-lucide="x" aria-hidden="true"></i></button>
+      <button id="fullscreen" title="Fullscreen" aria-label="Fullscreen"><i data-lucide="maximize" aria-hidden="true"></i></button>
+      <button id="help" title="功能与使用说明" aria-label="功能与使用说明" aria-haspopup="dialog" aria-controls="help-dialog"><i data-lucide="circle-help" aria-hidden="true"></i></button>
+      <a id="project-link" href="https://github.com/jinnsjj/pano-player" target="_blank" rel="noopener noreferrer" title="GitHub project (opens in a new tab)" aria-label="GitHub project (opens in a new tab)"><i data-lucide="external-link" aria-hidden="true"></i></a>
+    </div>
+    <input id="file-input" type="file" accept=".mp4,.webm,.wav,.flac,.mov,.mkv" hidden>
+  </header>
+  <p id="message" role="alert" hidden></p>
+  <main id="workspace">
+    <section id="welcome" aria-label="No media selected">
+      <img src="./media/icon.png" width="72" height="72" alt="">
+      <h1>PanoPlayer</h1>
+      <button id="empty-open"><i data-lucide="folder-open" aria-hidden="true"></i>Open media</button>
+      <button id="empty-help" lang="zh-CN"><i data-lucide="circle-help" aria-hidden="true"></i>功能与使用说明</button>
+    </section>
+  </main>
+  <div id="drop-target" hidden><span>Open media</span></div>
+  <dialog id="help-dialog" lang="zh-CN" aria-labelledby="help-title">
+    <div class="help-heading"><h2 id="help-title">功能与使用说明</h2><button id="help-close" title="关闭说明" aria-label="关闭说明" autofocus><i data-lucide="x" aria-hidden="true"></i></button></div>
+    <div class="help-content">
+      <p>PanoPlayer 是一个在浏览器中运行的本地全景视频与空间音频播放器，可查看画面、监听 FOA，并实时分析声音方向与响度。</p>
+      <section aria-labelledby="help-start"><h3 id="help-start">开始播放</h3>
+        <ol>
+          <li>点击 <strong>Open</strong>，或将一个本地文件拖入网页。支持选择 MP4、WebM、MOV、MKV、WAV 和 FLAC。</li>
+          <li>点击播放按钮。进度条可跳转时间，右侧可调整音量或静音；有多个音轨时，在 <strong>Audio → Track</strong> 中切换。</li>
+          <li>再次打开文件会替换当前媒体；右上角关闭按钮释放当前文件，全屏按钮扩大工作区。</li>
+        </ol>
+      </section>
+      <section aria-labelledby="help-video"><h3 id="help-video">全景与视角</h3>
+        <dl>
+          <dt>Panorama / Perspective</dt><dd>播放条上的两个视图按钮分别显示展开全景和透视视角。透视模式可拖拽转向、滚轮缩放，使用重置按钮回到正前方。</dd>
+          <dt>Projection / Layout / Rotation</dt><dd>按素材选择 360° ERP、180° ERP 或 EAC。Auto 仅按画面比例推测；SBS 取左眼，TB 取上眼，不是 VR 双眼输出。Rotation 用于修正画面旋转。</dd>
+          <dt>Grid / PanoView</dt><dd>Grid 显示方向网格；PanoView 在透视模式中显示全景缩略图与当前视野范围。Aspect 可切换透视画面的 4:3 / 16:9 比例。</dd>
+        </dl>
+      </section>
+      <section aria-labelledby="help-audio"><h3 id="help-audio">空间音频与分析</h3>
+        <dl>
+          <dt>FOA 监听</dt><dd>根据素材设置 Channel（WYZX / WXYZ）和 Norm（SN3D / N3D）。Binaural 适合耳机，听音方向随透视视角变化；Stereo 保持录音坐标方向。</dd>
+          <dt>PowerMap</dt><dd>勾选后显示 FOA 声能方向热图。旁边菜单可选择 MUSIC / PWD、MUSIC 的假设声源数及透明度。它用于定性观察，不是声源分离或校准定位结果。</dd>
+          <dt>Meters</dt><dd>显示监听输出的 Peak、True Peak、RMS、LUFS 和 LRA。短片段或刚开始播放时，部分统计需要积累数据；表头问号提供各指标说明。</dd>
+        </dl>
+        <p class="help-note">四声道不一定是 FOA。六声道按“4 路 FOA + 2 路头锁定立体声”解释，不适用于普通 5.1。普通单声道、立体声使用 Bypass，空间音频控件会禁用。请按素材真实声道语义设置。</p>
+      </section>
+      <section aria-labelledby="help-privacy"><h3 id="help-privacy">本地处理与隐私</h3>
+        <ul>
+          <li>文件直接在本机浏览器中读取、解码和分析，不上传媒体。网站只提供网页程序资源，不使用云端转码。</li>
+          <li>仅在本机保存设置，不保存文件内容、路径或访问权限。刷新整个网页后需要重新选择文件。</li>
+        </ul>
+      </section>
+    </div>
+  </dialog>
+  <noscript>Enable JavaScript to open local media.</noscript>
+</body>
+</html>

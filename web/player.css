@@ -1,0 +1,13 @@
+/* The outer web shell owns the file toolbar; the shared player owns playback. */
+body > header { display: none; }
+body { min-height: 100dvh; }
+@media (max-width: 560px) {
+  .floating-overlay {
+    position: relative;
+    inset: auto !important;
+    width: calc(100% - 24px);
+    max-height: none;
+    margin: 12px;
+  }
+  .floating-titlebar { cursor: default; touch-action: auto; }
+}

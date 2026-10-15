@@ -3,6 +3,31 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
+test('local files use BlobSource for playback and envelopes without URL media reads', async () => {
+  for (const envelope of [false, true]) {
+    const sent = [], self = {}, file = new Blob(['fixture']);
+    let opened;
+    const track = { codec: 'flac', getDecoderConfig: async () => ({ numberOfChannels: 4, sampleRate: 48000 }),
+      getName: async () => '', getLanguageCode: async () => 'und' };
+    const source = fs.readFileSync(require.resolve('../src/stream-worker.js'), 'utf8').replace(/^import .*;\n/gm, '');
+    vm.runInNewContext(source, { self, postMessage: data => sent.push(data), resourceFetch() { throw new Error('No media fetch'); },
+      BlobSource: class { constructor(value) { opened = value; } },
+      UrlSource: class { constructor() { throw new Error('Local media must not use UrlSource'); } },
+      Input: class {
+        getAudioTracks = async () => [track]; getPrimaryAudioTrack = async () => track;
+        getPrimaryVideoTrack = async () => null; getDurationFromMetadata = async () => 2;
+        getFormat = async () => ({ name: 'FLAC' }); dispose() {}
+      }, ALL_FORMATS: [], setWebmOpusTiming() {},
+      AudioSampleSink: class { samples() { return { return: async () => {} }; } },
+      scanEnvelope: async () => sent.push({ type: 'envelope' }),
+    });
+    self.onmessage({ data: { type: 'open', file, envelope } });
+    await new Promise(setImmediate);
+    assert.equal(opened, file);
+    assert.equal(sent[0]?.type, envelope ? 'envelope' : 'metadata', JSON.stringify(sent));
+  }
+});
+
 test('worker enumerates audio tracks, selects by index and rejects unsupported selections', async () => {
   const tracks = [0, 6, 16].map((channels, index) => ({ codec: 'flac',
     getDecoderConfig: async () => ({ numberOfChannels: channels, sampleRate: index === 1 ? 44100 : 48000 }),

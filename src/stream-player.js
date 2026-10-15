@@ -4,6 +4,7 @@ import { createHostFetch } from './host-fetch.js';
 export class StreamPlayer extends EventTarget {
   constructor(element, api) {
     super(); this.element = element; this.dataset = element.dataset;
+    this.file = api?.file;
     this.paused = true; this.readyState = 0; this.epoch = 0; this.time = 0; this.duration = NaN;
     this.videoWidth = 0; this.videoHeight = 0; this.frames = 0; this.dropped = 0;
     this.previewFrame = true;
@@ -32,7 +33,7 @@ export class StreamPlayer extends EventTarget {
       this.worker = new Worker(url); URL.revokeObjectURL(url);
       this.worker.onerror = event => this.fail(new Error(event.message));
       this.worker.onmessage = ({ data }) => this.receive(data);
-      this.worker.postMessage({ type: 'open', url: this.dataset.source,
+      this.worker.postMessage({ type: 'open', url: this.dataset.source, file: this.file,
         epoch: this.epoch, audioTrackIndex: this.audioTrackIndex, time: this.time,
         libav: new URL('libav-6.10.7.1.5-decoder-aac.js', this.dataset.decoder).href });
     } catch (error) { this.fail(error); }
@@ -53,7 +54,7 @@ export class StreamPlayer extends EventTarget {
         if (data.done) finish();
       } else if (data.type === 'error') finish();
     };
-    worker.postMessage({ type: 'open', envelope: true, url: this.dataset.source,
+    worker.postMessage({ type: 'open', envelope: true, url: this.dataset.source, file: this.file,
       audioTrackIndex: this.audioTrackIndex,
       libav: new URL('libav-6.10.7.1.5-decoder-aac.js', this.dataset.decoder).href });
   }
