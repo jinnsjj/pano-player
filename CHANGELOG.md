@@ -12,6 +12,10 @@
 
 - Match the playback area to the selected Perspective aspect to remove internal black bars.
 
+### Fixed
+
+- Resize the existing extension icon to meet the Marketplace's 1024-pixel limit without changing its design.
+
 ## 0.4.33 - 2026-10-12
 
 ### Fixed
