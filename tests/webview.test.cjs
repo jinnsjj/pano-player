@@ -5,6 +5,14 @@ const manifest = require('../package.json');
 test('extension manifest accepts VS Code 1.84 releases', () => {
   assert.equal(manifest.engines.vscode, '^1.84.0');
 });
+test('Marketplace icon is a square PNG within the 1024 pixel limit', () => {
+  const icon = require('node:fs').readFileSync(require('node:path').resolve(__dirname, '..', manifest.icon));
+  assert.equal(icon.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(icon.subarray(12, 16).toString('ascii'), 'IHDR');
+  const width = icon.readUInt32BE(16), height = icon.readUInt32BE(20);
+  assert.equal(width, height);
+  assert.ok(width > 0 && width <= 1024, `Icon dimensions: ${width}x${height}`);
+});
 test('webview uses restrictive CSP and escapes input-derived title', () => {
   const html = renderHtml({ title: '<img onerror="bad">', cspSource: 'vscode-resource:', script: 'https://local/player.js', style: 'https://local/player.css', icons: 'https://local/lucide.js', nonce: 'safeNonce' });
   assert.match(html, /default-src 'none'/);
