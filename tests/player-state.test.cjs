@@ -16,6 +16,7 @@ function setup(saved = {}) {
       width: 2048, height: 1024,
       getContext: () => ({ clearRect() {}, putImageData() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, strokeText() {}, fillText() {} }),
       attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, load() {}, render() {},
+      parentElement: { clientWidth: 1280 },
       querySelectorAll() { return []; }, focus() {},
       showPopover() { this.popoverOpen = true; this.fire('toggle'); }, hidePopover() { this.popoverOpen = false; this.fire('toggle'); },
       matches(selector) { return selector === ':popover-open' && Boolean(this.popoverOpen); },
@@ -47,8 +48,11 @@ function setup(saved = {}) {
   window.FoaView = class {
     setGridEnabled(enabled) { this.grid = enabled; }
     setOverviewEnabled(enabled) { this.overview = enabled; }
-    configure(active) { this.active = active; } mapChanged() {} sourceChanged() {} render() {} dispose() {} reset() {}
-    restore({ yaw, pitch, fov }) { this.camera = { yaw, pitch, fov }; }
+    configure(active, hasVideo, projection, ratio = '4:3') {
+      this.active = active;
+      this.camera.aspect = { '16:9': 16 / 9, '4:3': 4 / 3 }[ratio];
+    } mapChanged() {} sourceChanged() {} render() {} dispose() {} reset() {}
+    restore({ yaw, pitch, fov }) { this.camera = { yaw, pitch, fov, aspect: 4 / 3 }; }
     getState() { return { active: this.active, grid: this.grid, overview: this.overview, ...this.camera }; }
   };
   window.PanoProjection = class {
@@ -56,7 +60,9 @@ function setup(saved = {}) {
     render() { return false; } dispose() {}
   };
   vm.runInNewContext(buildSync({ entryPoints: [require.resolve('../media/player.js')], bundle: true, write: false }).outputFiles[0].text, {
-    window, document: { getElementById: get }, performance,
+    window, document: { getElementById: get }, performance, AbortController,
+    ResizeObserver: class { observe() {} disconnect() {} },
+    getComputedStyle: element => ({ paddingLeft: '24', paddingRight: '24', getPropertyValue: key => element.style?.[key] || '2' }),
     Option: class { constructor(text, value) { this.textContent = text; this.value = value; } },
     acquireVsCodeApi: () => ({ getState: () => saved, setState(value) { persisted = value; }, postMessage: m => messages.push(m) }),
     lucide: { createIcons() {} }, requestAnimationFrame(fn) { frame = fn; }, Uint8ClampedArray, ImageData: class {},
@@ -210,8 +216,10 @@ test('spatial tabs and 180 ERP preserve the clock and full map domain', () => {
   const before = s.state().generation;
   s.get('view-spatial').fire('click');
   assert.equal(s.state().view.active, true); assert.equal(v.hidden, true);
+  assert.equal(s.get('stage').style['--video-aspect'], String(s.state().view.aspect));
   assert.equal(s.get('view-spatial').tabIndex, 0); assert.equal(s.get('view-flat').tabIndex, -1);
   s.get('view-flat').fire('click'); assert.equal(v.hidden, false);
+  assert.equal(s.get('stage').style['--video-aspect'], '2');
   v.videoWidth = v.videoHeight = 480; v.fire('loadedmetadata');
   assert.equal(s.get('projection').value, 'auto'); assert.equal(s.state().projection, '180');
   assert.equal(s.get('stage').style['--video-aspect'], '2');
@@ -219,6 +227,30 @@ test('spatial tabs and 180 ERP preserve the clock and full map domain', () => {
   assert.equal(s.get('stage').style['--video-width'], '50%');
   assert.equal(v.currentTime, 4); assert.equal(v.paused, false); assert.equal(s.state().generation, before);
 });
+test('Perspective aspect selection drives the stage, persists, and leaves the vertical FOV unchanged', () => {
+  const s = setup();
+  assert.equal(s.get('perspectiveRatio').disabled, true);
+  s.get('view-spatial').fire('click');
+  assert.equal(s.get('perspectiveRatio').disabled, false);
+  for (const [ratio, aspect] of [['16:9', 16 / 9], ['4:3', 4 / 3]]) {
+    s.get('perspectiveRatio').value = ratio; s.get('perspectiveRatio').fire('change');
+    assert.equal(s.get('stage').style['--video-aspect'], String(aspect));
+    assert.equal(s.state().view.aspect, aspect);
+    assert.equal(s.state().view.fov, 85);
+    assert.equal(s.persisted().perspectiveRatio, ratio);
+    const restored = setup(s.persisted());
+    assert.equal(restored.get('perspectiveRatio').value, ratio);
+    assert.equal(restored.get('stage').style['--video-aspect'], String(aspect));
+  }
+  s.get('view-flat').fire('click');
+  assert.equal(s.get('stage').style['--video-aspect'], '2');
+  assert.equal(s.get('perspectiveRatio').disabled, true);
+  s.get('view-spatial').fire('click');
+  assert.equal(s.get('stage').style['--video-aspect'], String(4 / 3));
+  s.get('reset-settings').fire('click');
+  assert.equal(s.get('perspectiveRatio').value, '4:3');
+});
+
 test('native metadata infers projection and preserves WAV and arbitrary aspect ratios', () => {
   for (const [width, height, projection] of [[900, 1000, '180'], [1100, 1000, '180'], [1120, 1000, '360'], [1920, 1080, '360'], [270, 480, '360'], [0, 0, '360']]) {
     const s = setup(), v = s.get('video');

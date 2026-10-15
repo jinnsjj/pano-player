@@ -19,6 +19,7 @@ for (const [projection, layout] of [['360', 'mono'], ['180', 'mono'], ['360', 's
     projector.configure(projection, layout); projector.render(0);
   }
   const view = new window.FoaView(host, video, map, { setOrientation() {} }, grid);
+  if (view.camera.fov !== 85) failures.push('Default vertical FOV must be 85 degrees');
   // Mirror selectView(): restore inactive preferences, then activate, then decode.
   view.restore({ yaw: .8, pitch: .2, fov: 85 }); view.configure(true, true, projection);
   const ctx = source.getContext('2d'); ctx.fillStyle = '#00ff00'; ctx.fillRect(0, 0, 960, 480);
@@ -32,7 +33,25 @@ for (const [projection, layout] of [['360', 'mono'], ['180', 'mono'], ['360', 's
   const label = `${projection}/${layout}: ${passed ? 'PASS' : 'FAIL'} first-frame RGB=${Array.from(pixel).slice(0, 3)}; restored footprint=${footprintMatches}`;
   const item = document.createElement('li'); item.textContent = label; document.getElementById('cases').append(item);
   if (!passed) failures.push(label);
+  view.reset();
+  for (const [width, height] of [[960, 540], [390, 700], [700, 390]]) {
+    host.style.width = `${width}px`; host.style.height = `${height}px`; view.render();
+    const gl = view.gpu.getContext(), sample = (x, y) => {
+      const bytes = new Uint8Array(4);
+      gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, bytes); return bytes;
+    };
+    const center = sample(Math.floor(gl.drawingBufferWidth / 2), Math.floor(gl.drawingBufferHeight / 2));
+    const bar = width / height > view.camera.aspect
+      ? sample(0, Math.floor(gl.drawingBufferHeight / 2)) : sample(Math.floor(gl.drawingBufferWidth / 2), 0);
+    if (view.camera.fov !== 85 || view.camera.aspect !== 4 / 3 || center[1] < 80 || bar.slice(0, 3).some(Boolean)) {
+      failures.push(`${projection}/${layout}: incorrect FOV or letterboxing at ${width}x${height}`);
+    }
+  }
+  host.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, cancelable: true }));
+  if (view.camera.fov >= 85) failures.push('Wheel zoom failed');
+  view.reset();
+  if (view.camera.fov !== 85) failures.push('Reset FOV failed');
   view.dispose(); projector?.dispose(); host.remove();
 }
-document.getElementById('result').textContent = failures.length ? `FAIL: ${failures.length} cases` : 'PASS: all five projections/layouts show the first frame and restored footprint';
+document.getElementById('result').textContent = failures.length ? `FAIL: ${failures.join('; ')}` : 'PASS: all five projections/layouts show the first frame, restored footprint, fixed FOV and black bars';
 </script></html>

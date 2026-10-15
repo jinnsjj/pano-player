@@ -1,13 +1,14 @@
 'use strict';
 const defaults = Object.freeze({
-  projection: 'auto', layout: 'mono', rotation: '0', view: 'flat', listening: 'binaural',
+  projection: 'auto', layout: 'mono', rotation: '0', view: 'flat', perspectiveRatio: '4:3', listening: 'binaural',
   order: 'WYZX', normalization: 'SN3D', enabled: false, opacity: .75,
   mapAlgorithm: 'music', mapSources: 1,
-  volume: 1, muted: false, grid: false, gridOpacity: 1, meter: false, overview: true, yaw: 0, pitch: 0, fov: 72,
+  volume: 1, muted: false, grid: false, gridOpacity: 1, meter: false, overview: true, yaw: 0, pitch: 0, fov: 85,
 });
 const choices = {
   projection: ['auto', '180', '360', 'eac'], layout: ['mono', 'sbs', 'tb'],
   rotation: ['0', '90', '180', '270'],
+  perspectiveRatio: ['4:3', '16:9'],
   view: ['flat', 'spatial'], listening: ['binaural', 'stereo'],
   order: ['WYZX', 'WXYZ'], normalization: ['SN3D', 'N3D'],
   mapAlgorithm: ['music', 'pwd'], mapSources: [1, 2],

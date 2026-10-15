@@ -1,5 +1,8 @@
 tests/**
+web/**
 .impeccable/**
+.wrangler/**
+**/.DS_Store
 **/__pycache__/**
 **/*.pyc
 *.vsix

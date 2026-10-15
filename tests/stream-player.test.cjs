@@ -4,6 +4,37 @@ const vm = require('node:vm');
 const path = require('node:path');
 const { buildSync } = require('esbuild');
 
+test('local File reaches decoder, envelope and track reload; disposal terminates both workers', async () => {
+  const bundle = buildSync({ entryPoints: [path.join(__dirname, '../src/stream-player.js')],
+    bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
+  const workers = [];
+  const context = { module: { exports: {} }, exports: {}, window: {}, EventTarget, Event, AbortController, Blob, URL,
+    fetch: async () => ({ ok: true, text: async () => '' }),
+    Worker: class {
+      constructor() { this.messages = []; workers.push(this); }
+      postMessage(data) { this.messages.push(data); }
+      terminate() { this.terminated = true; }
+    },
+  };
+  vm.runInNewContext(bundle, context);
+  const file = new Blob(['local bytes']);
+  const player = new context.module.exports.StreamPlayer({ dataset: { decoder: 'https://example.test/stream-worker.js' } }, { file });
+  await new Promise(setImmediate);
+  const metadata = { type: 'metadata', epoch: 0, channels: 4, sampleRate: 48000, duration: 2,
+    width: 0, height: 0, audioTracks: [{ supported: true }, { supported: true }], audioTrackIndex: 0 };
+  player.receive(metadata);
+  assert.equal(workers.length, 2);
+  for (const worker of workers) assert.equal(worker.messages[0].file, file);
+  const reload = player.selectAudioTrack(1);
+  await new Promise(setImmediate);
+  player.receive({ ...metadata, epoch: 1, audioTrackIndex: 1 });
+  await reload;
+  assert.ok(workers[0].terminated && workers[1].terminated);
+  for (const worker of workers) assert.equal(worker.messages[0].file, file);
+  player.dispose();
+  assert.ok(workers.every(worker => worker.terminated));
+});
+
 test('track reload preserves time, releases old PCM and ignores stale worker messages', async () => {
   const bundle = buildSync({ entryPoints: [path.join(__dirname, '../src/stream-player.js')],
     bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;

@@ -20,6 +20,7 @@ async function setup() {
   vm.runInNewContext(bundle, {
     window, require: () => ({ ...three, WebGLRenderer: class {
       domElement = canvas(); setPixelRatio() {} setSize() {} render() {} dispose() {}
+      setViewport(...viewport) { this.viewport = viewport; }
     } }), document: { createElement: canvas }, devicePixelRatio: 1,
     ResizeObserver: class { observe() {} disconnect() {} }, AbortController,
     performance: { now: () => now }, ImageData: class { constructor(data) { this.data = data; } },
@@ -28,6 +29,40 @@ async function setup() {
   const view = new window.FoaView(host, video, map, { setOrientation() {} }, grid, overviewHost);
   return { view, video, source, overviewHost, advance(ms) { now += ms; } };
 }
+
+test('Perspective defaults to 4:3 centered in wide and tall hosts', async () => {
+  const { view } = await setup();
+  view.configure(true, true, '360');
+  for (const [width, height] of [[960, 540], [390, 700], [700, 390]]) {
+    view.host.clientWidth = width; view.host.clientHeight = height; view.render();
+    const [x, y, w, h] = view.gpu.viewport;
+    assert.equal(view.camera.fov, 85);
+    assert.equal(view.camera.aspect, 4 / 3);
+    assert.ok(Math.abs(w / h - view.camera.aspect) < 1e-8);
+    assert.ok(Math.abs(2 * x + w - width) < 1e-8 && Math.abs(2 * y + h - height) < 1e-8);
+    assert.ok(x >= 0 && y >= 0 && (x === 0 || y === 0));
+  }
+  view.zoom(60); view.reset(); assert.equal(view.camera.fov, 85);
+  view.dispose();
+});
+
+test('Perspective ratio changes preserve pose and vertical FOV and refresh the footprint', async () => {
+  const { view } = await setup();
+  view.restore({ yaw: .4, pitch: .1, fov: 85 });
+  view.configure(true, true, '360');
+  let previous = view.footprintKey;
+  for (const [ratio, aspect] of [['16:9', 16 / 9], ['4:3', 4 / 3]]) {
+    view.configure(true, true, '360', ratio);
+    assert.equal(view.camera.aspect, aspect); assert.equal(view.camera.fov, 85);
+    assert.ok(Math.abs(view.yaw - .4) < 1e-8); assert.equal(view.pitch, .1);
+    assert.notEqual(view.footprintKey, previous); previous = view.footprintKey;
+    const [, , width, height] = view.gpu.viewport;
+    assert.ok(Math.abs(width / height - aspect) < 1e-8);
+    view.reset(); assert.equal(view.camera.aspect, aspect); assert.equal(view.camera.fov, 85);
+    view.orient(.4, .1);
+  }
+  view.dispose();
+});
 
 test('floating overview owns the thumbnail and reopens fresh while playback is paused', async () => {
   const { view, video, source, overviewHost, advance } = await setup();

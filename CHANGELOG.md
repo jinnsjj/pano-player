@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.34 - 2026-10-15
+
+### Added
+
+- Persisted Perspective aspect selection: 4:3 (default) and 16:9. The canvas width follows its height and selected aspect without stretching the image.
+- Resize the playback area using its bottom divider, with pointer and keyboard controls.
+- Standalone local-file web player sharing the extension's playback, projection, FOA and analysis core, with a static build and Cloudflare Pages deployment support.
+
+### Changed
+
+- Match the playback area to the selected Perspective aspect to remove internal black bars.
+
+## 0.4.33 - 2026-10-12
+
+### Fixed
+
+- Allow editor context playback on remote extension hosts that expose native file URIs instead of remote URIs.
+
+## 0.4.32 - 2026-10-12
+
+### Added
+
+- Play with PanoPlayer from the text editor context menu using a selected absolute media path or the current line. Supports files outside the workspace and mounted drives; remote windows resolve paths on the remote host.
+
 ## 0.4.31 - 2026-09-23
 
 ### Fixed

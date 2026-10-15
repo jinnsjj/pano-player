@@ -5,6 +5,7 @@ const { randomBytes } = require('node:crypto');
 const { renderHtml } = require('./webview.cjs');
 const { hostFile } = require('./host-file.cjs');
 const { normalize } = require('./preferences.cjs');
+const { openEditorMedia } = require('./editor-media.cjs');
 
 function activate(context) {
   const log = vscode.window.createOutputChannel('PanoPlayer');
@@ -55,6 +56,8 @@ function activate(context) {
     },
   };
   context.subscriptions.push(log,
+    vscode.commands.registerTextEditorCommand('panoPlayer.openPath', editor =>
+      openEditorMedia(vscode, editor, context.extensionUri)),
     vscode.window.registerCustomEditorProvider('panoPlayer.player', provider, {
       supportsMultipleEditorsPerDocument: false, webviewOptions: { retainContextWhenHidden: true },
     }),

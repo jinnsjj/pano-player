@@ -2,7 +2,7 @@
   "name": "pano-player",
   "displayName": "PanoPlayer",
   "description": "Play ERP and EAC panoramas, mono or stereo video, with spatial FOA audio and live PowerMap overlays.",
-  "version": "0.4.31",
+  "version": "0.4.34",
   "icon": "media/icon.png",
   "publisher": "shijunjie",
   "author": "Junjie Shi",
@@ -44,6 +44,9 @@
   ],
   "scripts": {
     "build": "node build.cjs",
+    "build:web": "node web/build.cjs",
+    "preview:web": "node web/serve.cjs",
+    "test:web": "node web/build.cjs && node --test tests/web-build.test.cjs tests/web-host.test.cjs",
     "test": "node build.cjs && node --test tests/*.test.cjs",
     "vscode:prepublish": "node build.cjs",
     "prepackage": "node -e \"require('node:fs').mkdirSync('output', { recursive: true })\"",
@@ -54,6 +57,11 @@
       {
         "command": "panoPlayer.open",
         "title": "PanoPlayer: Open Media"
+      },
+      {
+        "command": "panoPlayer.openPath",
+        "title": "Play with PanoPlayer",
+        "enablement": "editorTextFocus"
       }
     ],
     "customEditors": [
@@ -96,6 +104,13 @@
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "panoPlayer.openPath",
+          "when": "editorTextFocus",
+          "group": "navigation@100"
+        }
+      ],
       "explorer/context": [
         {
           "command": "panoPlayer.open",

@@ -25,6 +25,7 @@ test('local and cloud editors expose the original media immediately without host
         registerCustomEditorProvider: (id, value) => { editorId = id; provider = value; return disposable; },
       },
       commands: {
+        registerTextEditorCommand: (id, handler) => { commands.set(id, handler); return disposable; },
         registerCommand: (id, handler) => { commands.set(id, handler); return disposable; },
         executeCommand: async (...args) => { opened.push(args); },
       },
@@ -34,7 +35,7 @@ test('local and cloud editors expose the original media immediately without host
       module,
       require(name) {
         if (name === 'vscode') return vscode;
-        if (/runtime|media\.cjs|child_process/.test(name)) throw new Error(`Startup must not import ${name}`);
+        if (/runtime|^\.\/media\.cjs$|child_process/.test(name)) throw new Error(`Startup must not import ${name}`);
         return name.startsWith('./') ? require(`../src/${name.slice(2)}`) : require(name);
       },
     });
@@ -45,8 +46,8 @@ test('local and cloud editors expose the original media immediately without host
     assert.equal(editorId, 'panoPlayer.player');
     assert.equal(manifest.contributes.customEditors[0].viewType, editorId);
     assert.deepEqual(manifest.activationEvents, ['onCustomEditor:' + editorId]);
-    assert.deepEqual([...commands.keys()], ['panoPlayer.open']);
-    assert.deepEqual(manifest.contributes.commands.map(c => c.command), [...commands.keys()]);
+    assert.deepEqual([...commands.keys()].sort(), ['panoPlayer.open', 'panoPlayer.openPath']);
+    assert.deepEqual(manifest.contributes.commands.map(c => c.command).sort(), [...commands.keys()].sort());
     const reference = fs.readFileSync(path.join(__dirname, '../docs/REFERENCE.md'), 'utf8');
     for (const { command, title } of manifest.contributes.commands) {
       assert.ok(reference.includes('| ' + title + ' | `' + command + '` |'));

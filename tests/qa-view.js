@@ -22,9 +22,9 @@
   host.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
   assert(view.yaw > 0, 'Keyboard look failed');
   host.dispatchEvent(new w.WheelEvent('wheel', { deltaY: -200, cancelable: true }));
-  assert(view.camera.fov < 72, 'Wheel zoom failed');
+  assert(view.camera.fov < 85, 'Wheel zoom failed');
   view.orient(0, 9); assert(view.pitch < Math.PI / 2, 'Pitch not clamped');
-  d.getElementById('reset-view').click(); assert(view.yaw === 0 && view.pitch === 0 && view.camera.fov === 72, 'Reset failed');
+  d.getElementById('reset-view').click(); assert(view.yaw === 0 && view.pitch === 0 && view.camera.fov === 85, 'Reset failed');
   const render = async yaw => {
     view.orient(yaw, 0);
     const context = new w.OfflineAudioContext(2, 4096, 48000);

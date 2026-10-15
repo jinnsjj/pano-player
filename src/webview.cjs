@@ -11,11 +11,11 @@ function meterGroup(title, unit, kind, columns) {
   return `<section class="meter-group ${kind}" aria-label="${title}"><h3 title="${title} (${unit})">${title}<span>${unit}</span></h3><div class="meter-columns">
     <div class="meter-axis" aria-hidden="true">${[0, -12, -24, -48, -72].map(db => `<span data-db="${db}">${db}</span>`).join('')}</div>${columns}</div></section>`;
 }
-function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, monitor, view, nonce, source, worker, worklet, decoder, pcm, stream, hostMedia = false, preferences }) {
+function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, monitor, view, nonce, source, worker, worklet, decoder, pcm, stream, hostMedia = false, preferences, bootstrap, extraStyle }) {
   return `<!doctype html><html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} data:; media-src ${cspSource}; connect-src ${cspSource}; worker-src blob:; style-src ${cspSource}; script-src ${cspSource} blob: 'wasm-unsafe-eval' 'nonce-${nonce}';">
-<link rel="stylesheet" href="${escape(style)}"><title>${escape(title)} - PanoPlayer</title></head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; img-src ${cspSource} data:; media-src ${cspSource}; connect-src ${cspSource}; worker-src blob:; style-src ${cspSource}; script-src ${cspSource} blob: 'wasm-unsafe-eval'${nonce ? ` 'nonce-${nonce}'` : ''};">
+<link rel="stylesheet" href="${escape(style)}">${extraStyle ? `<link rel="stylesheet" href="${escape(extraStyle)}">` : ''}<title>${escape(title)} - PanoPlayer</title></head>
 <body>
 <header>
   <div class="brand"><img src="${escape(logo || '')}" width="32" height="32" alt="" aria-hidden="true"><strong>PanoPlayer</strong></div>
@@ -32,6 +32,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
       <div id="empty"><i data-lucide="film" aria-hidden="true"></i><span id="status" role="status">Loading media</span><button id="retry" hidden>Retry</button></div>
     </div>
   </div>
+  <div id="viewport-resize" role="separator" aria-orientation="horizontal" aria-label="Playback area height" aria-controls="stage" title="Resize playback area" tabindex="0"></div>
   <div id="transport" role="group" aria-label="Playback controls">
     <button id="play" title="Play" aria-label="Play" disabled><i data-lucide="play" aria-hidden="true"></i></button>
     <output id="time" aria-live="off">0:00 / 0:00</output>
@@ -51,6 +52,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
       <select id="projection" aria-label="Video projection"><option value="auto">Auto</option><option value="360">360° ERP</option><option value="180">180° ERP</option><option value="eac">EAC (3×2)</option></select>
       <label>Layout <select id="layout" aria-label="Stereo layout"><option value="mono">Mono</option><option value="sbs">Stereo SBS · Left</option><option value="tb">Stereo TB · Top</option></select></label>
       <label>Rotation <select id="rotation" aria-label="Video rotation" title="Clockwise source rotation before stereo cropping and projection"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label>
+      <label>Aspect <select id="perspectiveRatio" aria-label="Perspective aspect ratio" disabled><option value="4:3">4:3</option><option value="16:9">16:9</option></select></label>
       <button id="reset-settings" title="Restore default settings" aria-label="Restore default settings"><i data-lucide="list-restart" aria-hidden="true"></i></button>
     </div></div>
     <div id="overlay-options" class="settings-section" role="group" aria-labelledby="overlay-heading">
@@ -126,6 +128,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
     <div id="overview-content"></div>
   </section>
 </main>
-<script nonce="${nonce}" src="${escape(icons)}"></script><script nonce="${nonce}" src="${escape(omnitone)}"></script><script type="module" nonce="${nonce}" src="${escape(stream)}"></script><script type="module" nonce="${nonce}" src="${escape(monitor)}"></script><script type="module" nonce="${nonce}" src="${escape(script)}"></script></body></html>`;
+${bootstrap ? `<script src="${escape(bootstrap)}"></script>` : ''}
+<script nonce="${nonce || ''}" src="${escape(icons)}"></script><script nonce="${nonce || ''}" src="${escape(omnitone)}"></script><script type="module" nonce="${nonce || ''}" src="${escape(stream)}"></script><script type="module" nonce="${nonce || ''}" src="${escape(monitor)}"></script><script type="module" nonce="${nonce || ''}" src="${escape(script)}"></script></body></html>`;
 }
 module.exports = { renderHtml };

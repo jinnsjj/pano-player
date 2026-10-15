@@ -4,6 +4,10 @@ const { defaults, normalize } = require('../src/preferences.cjs');
 test('preferences validate persisted or webview values and never retain transient media state', () => {
   assert.deepEqual(normalize(null), defaults);
   assert.equal(defaults.volume, 1);
+  assert.equal(defaults.fov, 85);
+  assert.equal(defaults.perspectiveRatio, '4:3');
+  for (const perspectiveRatio of ['16:9', '4:3']) assert.equal(normalize({ perspectiveRatio }).perspectiveRatio, perspectiveRatio);
+  for (const perspectiveRatio of ['removed-preset', '1:0', 16 / 9, null, '__proto__']) assert.equal(normalize({ perspectiveRatio }).perspectiveRatio, '4:3');
   assert.equal(defaults.enabled, false);
   assert.equal(defaults.mapAlgorithm, 'music'); assert.equal(defaults.mapSources, 1);
   assert.equal(normalize({ mapAlgorithm: 'pwd', mapSources: 2 }).mapAlgorithm, 'pwd');

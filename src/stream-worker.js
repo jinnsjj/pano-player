@@ -1,4 +1,4 @@
-import { Input, UrlSource, ALL_FORMATS, AudioSampleSink, VideoSampleSink, EncodedPacketSink } from 'mediabunny';
+import { Input, UrlSource, BlobSource, ALL_FORMATS, AudioSampleSink, VideoSampleSink, EncodedPacketSink } from 'mediabunny';
 import { getAacChannelCount, setWebmOpusTiming } from './stream-codecs.js';
 import { resourceFetch } from './resource-fetch.js';
 import { scanEnvelope } from './envelope.js';
@@ -16,9 +16,9 @@ function position(time) {
   audio = audioSink?.samples(time - .12);
   video = videoSink?.samples(time);
 }
-async function open(url, libav, selectedTrack, time = 0, envelope = false) {
+async function open(url, libav, selectedTrack, time = 0, envelope = false, file) {
   input?.dispose();
-  input = new Input({ formats: ALL_FORMATS, source: new UrlSource(url, {
+  input = new Input({ formats: ALL_FORMATS, source: file ? new BlobSource(file) : new UrlSource(url, {
     maxCacheSize: 8 * 1024 * 1024, getRetryDelay: attempt => attempt < 2 ? .25 : null,
     handleUnhandledError: error => send({ type: 'error', message: error.message }),
   }) });
@@ -120,6 +120,6 @@ self.onmessage = ({ data }) => {
   if (data.type === 'seek') { epoch = data.epoch; position(data.time); return; }
   if (data.epoch !== epoch && data.type !== 'open') return;
   const generation = epoch;
-  const task = data.type === 'open' ? open(data.url, data.libav, data.audioTrackIndex, data.time, data.envelope) : data.type === 'audio' ? pullAudio(generation) : pullVideo(generation);
+  const task = data.type === 'open' ? open(data.url, data.libav, data.audioTrackIndex, data.time, data.envelope, data.file) : data.type === 'audio' ? pullAudio(generation) : pullVideo(generation);
   void task.catch(error => { if (generation === epoch) send({ type: 'error', message: error.message }); });
 };

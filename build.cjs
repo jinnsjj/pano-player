@@ -2,7 +2,7 @@ const { build } = require('esbuild');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 
-async function main() {
+async function buildMedia(outdir = path.join(__dirname, 'media')) {
   for (const [input, output] of [
     ['src/icons.js', 'lucide.min.js'],
     ['src/browser-monitor.js', 'monitor.js'],
@@ -14,9 +14,10 @@ async function main() {
     ['src/powermap/foa-capture-processor.js', 'foa-capture-processor.js'],
   ]) {
     await build({ entryPoints: [path.join(__dirname, input)], bundle: true,
-      outfile: path.join(__dirname, 'media', output), format: output === 'monitor.js' ? 'esm' : 'iife',
+      outfile: path.join(outdir, output), format: output === 'monitor.js' ? 'esm' : 'iife',
       platform: 'browser', target: 'chrome114', minify: true, legalComments: 'inline' });
   }
-  await fs.copyFile(path.join(__dirname, 'node_modules/lucide/LICENSE'), path.join(__dirname, 'media/LICENSE-lucide.txt'));
+  await fs.copyFile(path.join(__dirname, 'node_modules/lucide/LICENSE'), path.join(outdir, 'LICENSE-lucide.txt'));
 }
-main().catch(error => { console.error(error); process.exitCode = 1; });
+module.exports = { buildMedia };
+if (require.main === module) buildMedia().catch(error => { console.error(error); process.exitCode = 1; });
