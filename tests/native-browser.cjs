@@ -19,7 +19,7 @@ async function main() {
           monitor: 'monitor.js', omnitone: 'omnitone.min.js', view: 'view.js', worker: 'powermap-worker.js',
           worklet: 'foa-capture-processor.js' }).map(([key, value]) => [key, `${origin}/${value}`])) });
       res.setHeader('Content-Type', 'text/html');
-      res.end(html.replace('<body>', `<body><script nonce="qa">window.acquireVsCodeApi=()=>({getState:()=>null,setState:()=>{},postMessage:()=>{}});</script>`));
+      res.end(html.replace('<body id="player">', `<body id="player"><script nonce="qa">window.acquireVsCodeApi=()=>({getState:()=>null,setState:()=>{},postMessage:()=>{}});</script>`));
       return;
     }
     if (url.pathname === '/native') {

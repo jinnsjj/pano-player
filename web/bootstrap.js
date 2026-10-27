@@ -1,3 +1,4 @@
+import { validateFile } from './host.js';
 (() => {
   const host = window.parent !== window ? window.parent.panoWebHost : null;
   const file = host?.getFile();
@@ -7,6 +8,17 @@
     element.dataset[key] = new URL(element.dataset[key], location.href).href;
   }
   element.dataset.preferences = JSON.stringify(host.preferences.read());
+  element.dataset.title = file.name;
+  let nextSource = 0;
+  const audioFile = document.getElementById('audio-file');
+  audioFile.addEventListener('change', () => {
+    const selected = audioFile.files[0]; audioFile.value = '';
+    if (!selected) return;
+    const error = validateFile(selected);
+    window.dispatchEvent(new MessageEvent('message', { data: error ? { type: 'audio-source-error', message: error } : {
+      type: 'audio-source', source: { id: 'external-' + ++nextSource, name: selected.name, file: selected },
+    } }));
+  });
   document.title = `${file.name} - PanoPlayer`;
   window.acquireVsCodeApi = () => ({
     file,
@@ -14,6 +26,7 @@
     postMessage(message) {
       if (message.type === 'preferences') host.preferences.save(message.patch);
       if (message.type === 'diagnostic') console.debug('PanoPlayer:', message.text);
+      if (message.type === 'select-audio') audioFile.click();
     },
   });
   window.addEventListener('dragover', event => event.preventDefault());

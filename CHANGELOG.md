@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.35 - 2026-10-27
+
+### Added
+
+- External audio sources selected through one combined source-and-track menu in the extension and web player.
+- Pre-render channel mapper with numbered input/output channels, custom routing, bypass, Direct/Silent presets, and FOA Solo/HL Solo for six-channel sources.
+
+### Changed
+
+- Prebuffer audio replacements and switch at the current playback time without pausing or seeking the video, restarting its decoder, or clearing the picture. Failed switches keep the previous audio.
+- Scroll only the lower settings and media information while keeping the video and transport fixed. Playback-area resizing reserves space for settings in short windows.
+
 ## 0.4.34 - 2026-10-15
 
 ### Added

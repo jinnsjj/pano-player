@@ -48,16 +48,17 @@ test('envelope survives seeks but cancels on track changes and disposal; errors 
   old.onmessage({ data: { type: 'envelope', channels: [[.5]], done: false } });
   assert.equal(p.envelope[0][0], .5);
   p.audioTracks = [{ supported: true }, { supported: true }];
-  p.load = () => p.metadataReady();
-  await p.selectAudioTrack(1);
+  const replacement = new StreamPlayer({ dataset: p.dataset });
+  Object.assign(replacement, { decoderSource: '', channels: 4, duration: 2, audioTrackIndex: 1 });
+  p.useAudioSession(replacement);
   assert.equal(old.terminated, true); assert.equal(p.envelope, undefined);
   old.onmessage({ data: { type: 'envelope', channels: [[1]] } });
   assert.equal(p.envelope, undefined);
-  p.startEnvelope(); const next = workers[1];
+  const next = workers[1];
   assert.equal(next.open.audioTrackIndex, 1);
   next.onmessage({ data: { type: 'error' } });
   assert.equal(p.error, undefined); assert.equal(next.terminated, true);
-  p.dispose(); assert.equal(p.envelopeAbort.signal.aborted, true);
+  p.dispose(); assert.equal(replacement.envelopeAbort.signal.aborted, true);
 });
 test('dense envelope rows stay inside the unchanged height without overlapping', () => {
   const { attachEnvelope } = load('../media/envelope.js', { window: { devicePixelRatio: 1, addEventListener() {} } });

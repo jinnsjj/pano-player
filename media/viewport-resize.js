@@ -1,16 +1,23 @@
-export function attachViewportResize(stage, handle) {
-  let pointer;
+export function attachViewportResize(stage, handle, layout, transport) {
+  let pointer, lastMax;
   const events = new AbortController();
   const on = (type, listener) => handle.addEventListener(type, listener, { signal: events.signal });
   const limits = () => {
     const style = getComputedStyle(stage.parentElement);
     const width = stage.parentElement.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const aspect = Number(getComputedStyle(stage).getPropertyValue('--video-aspect')) || 2;
-    const max = Math.max(1, Math.min(window.innerHeight, width / aspect));
+    const padding = ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth']
+      .reduce((sum, property) => sum + (parseFloat(style[property]) || 0), 0);
+    // Keep the transport and a usable portion of settings visible, even after manual resizing.
+    const settingsHeight = Math.min(160, layout.clientHeight / 3);
+    const available = layout.clientHeight - transport.getBoundingClientRect().height
+      - handle.getBoundingClientRect().height - padding - settingsHeight;
+    const max = Math.max(1, Math.min(available, width / aspect));
     return { min: Math.min(120, max), max };
   };
   const sync = () => {
     const { min, max } = limits();
+    if (max !== lastMax) { stage.style.setProperty('--stage-max-height', `${max}px`); lastMax = max; }
     handle.setAttribute('aria-valuemin', Math.round(min));
     handle.setAttribute('aria-valuemax', Math.round(max));
     handle.setAttribute('aria-valuenow', Math.round(stage.getBoundingClientRect().height));
@@ -44,7 +51,8 @@ export function attachViewportResize(stage, handle) {
     event.preventDefault(); event.stopPropagation(); resize(next);
   });
   on('dblclick', () => { stage.style.removeProperty('--stage-height'); });
-  const observer = new ResizeObserver(sync); observer.observe(stage); observer.observe(stage.parentElement);
+  const observer = new ResizeObserver(sync);
+  for (const element of [stage, stage.parentElement, layout, transport, handle]) observer.observe(element);
   window.addEventListener('resize', sync, { signal: events.signal }); sync();
   return () => { events.abort(); observer.disconnect(); };
 }

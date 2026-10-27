@@ -1,4 +1,4 @@
 import { createIcons, Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, ListRestart, Scan,
-  AudioLines, RectangleHorizontal, View, Globe, Layers, Film, Radar, Headphones, X, ChevronDown, CircleHelp } from 'lucide';
+  AudioLines, RectangleHorizontal, View, Globe, Layers, Film, Radar, Headphones, X, ChevronDown, CircleHelp, FolderOpen, Grid2x2, Eraser } from 'lucide';
 window.lucide = { createIcons: () => createIcons({ icons: { Play, Pause, Volume2, VolumeX,
-  Maximize, RotateCcw, ListRestart, Scan, AudioLines, RectangleHorizontal, View, Globe, Layers, Film, Radar, Headphones, X, ChevronDown, CircleHelp } }) };
+  Maximize, RotateCcw, ListRestart, Scan, AudioLines, RectangleHorizontal, View, Globe, Layers, Film, Radar, Headphones, X, ChevronDown, CircleHelp, FolderOpen, Grid2x2, Eraser } }) };

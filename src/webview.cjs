@@ -16,14 +16,14 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; img-src ${cspSource} data:; media-src ${cspSource}; connect-src ${cspSource}; worker-src blob:; style-src ${cspSource}; script-src ${cspSource} blob: 'wasm-unsafe-eval'${nonce ? ` 'nonce-${nonce}'` : ''};">
 <link rel="stylesheet" href="${escape(style)}">${extraStyle ? `<link rel="stylesheet" href="${escape(extraStyle)}">` : ''}<title>${escape(title)} - PanoPlayer</title></head>
-<body>
+<body id="player">
 <header>
   <div class="brand"><img src="${escape(logo || '')}" width="32" height="32" alt="" aria-hidden="true"><strong>PanoPlayer</strong></div>
 </header>
-<main>
+<main id="player-layout">
   <div class="viewport">
     <div id="stage">
-      <canvas id="video" data-defaults="${escape(JSON.stringify(defaults))}" data-preferences="${escape(JSON.stringify(normalize(preferences)))}" data-host="${hostMedia ? '1' : '0'}" data-source="${escape(source || '')}" data-decoder="${escape(decoder || '')}" data-pcm="${escape(pcm || '')}" data-worker="${escape(worker || '')}" data-worklet="${escape(worklet || '')}" data-view="${escape(view || '')}" aria-label="Panorama video"></canvas>
+      <canvas id="video" data-title="${escape(title)}" data-defaults="${escape(JSON.stringify(defaults))}" data-preferences="${escape(JSON.stringify(normalize(preferences)))}" data-host="${hostMedia ? '1' : '0'}" data-source="${escape(source || '')}" data-decoder="${escape(decoder || '')}" data-pcm="${escape(pcm || '')}" data-worker="${escape(worker || '')}" data-worklet="${escape(worklet || '')}" data-view="${escape(view || '')}" aria-label="Panorama video"></canvas>
       <canvas id="projected" aria-label="Single-eye panorama" hidden></canvas>
       <canvas id="overlay" width="140" height="70" aria-label="FOA direction heatmap"></canvas>
       <div id="audio-poster" hidden><i data-lucide="audio-lines" aria-hidden="true"></i><span id="audio-format"></span></div>
@@ -46,6 +46,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
         <button id="reset-view" title="Reset view" aria-label="Reset view" disabled><i data-lucide="rotate-ccw" aria-hidden="true"></i></button>
     </div>
   </div>
+  <div id="settings-scroll" role="region" aria-label="Settings and media information" tabindex="0">
   <div id="options" role="group" aria-label="Media settings">
     <div id="projection-options" class="settings-section" role="group" aria-labelledby="projection-heading">
       <h2 id="projection-heading"><i data-lucide="globe" aria-hidden="true"></i>Projection</h2><div class="settings-row">
@@ -82,11 +83,25 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
     </div></div>
     <div id="audio-options" class="settings-section" role="group" aria-labelledby="audio-heading">
       <h2 id="audio-heading"><i data-lucide="audio-lines" aria-hidden="true"></i>Audio</h2><div class="settings-row">
-      <label id="audio-track-control" hidden>Track <select id="audio-track" aria-label="Audio track"></select></label>
+      <label id="audio-track-control">Track <select id="audio-track" aria-label="Audio source and track" disabled></select></label>
+      <button id="audio-open" title="Open external audio" aria-label="Open external audio" disabled><i data-lucide="folder-open" aria-hidden="true"></i></button>
+      <input id="audio-file" type="file" accept=".mp4,.webm,.wav,.flac,.mov,.mkv" hidden>
       <label>Monitor <select id="listening" aria-label="Listening mode"><option value="binaural">Binaural</option><option value="stereo">Stereo</option><option id="bypass-option" value="bypass" hidden>Bypass</option><option id="no-audio-option" value="none" hidden>No audio</option></select></label>
       <label>Channel <select id="order" aria-label="FOA channel order"><option>WYZX</option><option>WXYZ</option></select></label>
       <label>Norm <select id="normalization" aria-label="FOA input normalization"><option>SN3D</option><option>N3D</option></select></label>
-    </div></div>
+      <button id="mapper-open" aria-label="Channel mapper" aria-controls="mapper-panel" aria-expanded="false" title="Channel mapper" disabled><i data-lucide="grid-2x2" aria-hidden="true"></i>Mapper <span id="mapper-summary">Direct</span></button>
+    </div><output id="audio-switch-status" role="status" hidden></output></div>
+    <section id="mapper-panel" aria-labelledby="mapper-heading" hidden>
+      <div class="mapper-toolbar"><h2 id="mapper-heading">Channel Mapper</h2><span id="mapper-format"></span><span class="mapper-position">Pre-render</span><button id="mapper-close" aria-label="Close channel mapper" title="Close channel mapper"><i data-lucide="x" aria-hidden="true"></i></button></div>
+      <div class="mapper-toolbar">
+        <label class="toggle"><input id="mapper-enabled" type="checkbox" checked><span>Enabled</span></label>
+        <label>Preset <select id="mapper-preset" aria-label="Channel mapping preset"><option value="identity">Direct</option><option id="mapper-foa" value="foa">FOA Solo</option><option id="mapper-hl" value="hl">HL Solo</option><option value="clear">Silent</option><option value="custom" disabled>Custom</option></select></label>
+        <button id="mapper-reset" aria-label="Reset channel mapping" title="Reset channel mapping"><i data-lucide="rotate-ccw" aria-hidden="true"></i></button>
+        <button id="mapper-clear" aria-label="Clear channel mapping" title="Clear channel mapping"><i data-lucide="eraser" aria-hidden="true"></i></button>
+      </div>
+      <div class="mapper-table-wrap" tabindex="0" role="region" aria-label="Channel routing matrix"><table id="mapper-matrix" aria-label="Channel routing, output rows and input columns"></table></div>
+      <output id="mapper-warning" role="status" hidden>Summed inputs may clip.</output>
+    </section>
   </div>
   <footer><span id="detail" role="status">Loading media information</span></footer>
   <section class="floating-overlay" id="meter-overlay" role="dialog" aria-labelledby="meter-heading" tabindex="-1" hidden>
@@ -127,6 +142,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
     </div>
     <div id="overview-content"></div>
   </section>
+  </div>
 </main>
 ${bootstrap ? `<script src="${escape(bootstrap)}"></script>` : ''}
 <script nonce="${nonce || ''}" src="${escape(icons)}"></script><script nonce="${nonce || ''}" src="${escape(omnitone)}"></script><script type="module" nonce="${nonce || ''}" src="${escape(stream)}"></script><script type="module" nonce="${nonce || ''}" src="${escape(monitor)}"></script><script type="module" nonce="${nonce || ''}" src="${escape(script)}"></script></body></html>`;

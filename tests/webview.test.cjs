@@ -85,6 +85,19 @@ test('one accessible meter help describes every metric without adding controls t
   const help = html.match(/<div id="meter-help" popover="auto" role="dialog"[^>]*>[\s\S]*?<\/div>/)[0];
   for (const text of ['Peak', 'dBFS', 'True Peak', 'dBTP', 'RMS', 'LUFS', 'LRA', 'LU', 'L/R', '400 ms', '3 seconds', 'since reset', '10th to 95th']) assert.ok(help.includes(text), text);
 });
+test('settings and inline overlays scroll separately from the playback area and transport', () => {
+  const html = renderHtml({ title: 'review.webm' });
+  const start = html.indexOf('<div id="settings-scroll"');
+  const scroll = html.slice(start, html.indexOf('</main>'));
+  assert.match(html, /<body id="player">/);
+  assert.match(html, /<main id="player-layout">/);
+  assert.ok(start > html.indexOf('id="transport"'));
+  assert.match(scroll, /role="region" aria-label="Settings and media information" tabindex="0"/);
+  for (const id of ['options', 'mapper-panel', 'detail', 'meter-overlay', 'overview-overlay']) {
+    assert.ok(scroll.includes(`id="${id}"`));
+  }
+  for (const id of ['stage', 'viewport-resize', 'transport']) assert.ok(!scroll.includes(`id="${id}"`));
+});
 test('all webview icons are included in the selective Lucide registry', () => {
   const source = require('node:fs').readFileSync(require.resolve('../src/icons.js'), 'utf8');
   const registered = new Set(source.match(/icons: \{([^}]+)\}/)[1].split(',').map(name => name.trim()));

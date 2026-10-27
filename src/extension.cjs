@@ -36,6 +36,8 @@ function activate(context) {
         decoder: asset('stream-worker.js'), pcm: asset('pcm-processor.js'), stream: asset('stream-player.js'),
       });
       const media = hostFile(document.uri.fsPath, message => panel.webview.postMessage(message));
+      const audioFiles = new Map();
+      let disposed = false, selectingAudio = false;
       const receive = panel.webview.onDidReceiveMessage(message => {
         if (message?.type === 'preferences' && message.patch && typeof message.patch === 'object') {
           preferences = normalize({ ...preferences, ...message.patch });
@@ -44,7 +46,35 @@ function activate(context) {
           });
           return;
         }
-        if (message?.type === 'read-media') { void media.read(message); return; }
+        if (message?.type === 'select-audio' && !selectingAudio) {
+          selectingAudio = true;
+          void (async () => {
+            try {
+              const selected = (await vscode.window.showOpenDialog({ canSelectMany: false, title: 'Open external audio',
+                filters: { 'Audio or video': ['wav', 'flac', 'mp4', 'webm', 'mov', 'mkv'] } }))?.[0];
+              if (!selected || disposed) return;
+              provider.openCustomDocument(selected);
+              let entry = [...audioFiles.values()].find(item => item.uri.toString() === selected.toString());
+              if (!entry) {
+                const id = randomBytes(16).toString('hex');
+                entry = { uri: selected, id, file: hostFile(selected.fsPath, reply => panel.webview.postMessage(reply)) };
+                audioFiles.set(id, entry);
+              }
+              await panel.webview.postMessage({ type: 'audio-source', source: {
+                id: entry.id, name: path.basename(selected.fsPath), url: 'pano-audio:' + entry.id,
+              } });
+            } catch (error) {
+              if (!disposed) void panel.webview.postMessage({ type: 'audio-source-error', message: error.message });
+            } finally { selectingAudio = false; }
+          })();
+          return;
+        }
+        if (message?.type === 'read-media') {
+          const owned = !message.sourceId || message.sourceId === 'primary' ? media : audioFiles.get(message.sourceId)?.file;
+          if (owned) void owned.read(message);
+          else void panel.webview.postMessage({ type: 'media-range', id: message.id, error: 'Unknown audio source.' });
+          return;
+        }
         if (message?.type === 'diagnostic' && typeof message.text === 'string') {
           log.appendLine(path.basename(document.uri.fsPath) + ': ' + message.text.slice(0, 2000));
         }
@@ -52,7 +82,11 @@ function activate(context) {
       const visibility = panel.onDidChangeViewState(() => {
         if (!panel.visible) void panel.webview.postMessage({ type: 'suspend' });
       });
-      panel.onDidDispose(() => { media.dispose(); receive.dispose(); visibility.dispose(); });
+      panel.onDidDispose(() => {
+        disposed = true; media.dispose();
+        for (const entry of audioFiles.values()) entry.file.dispose();
+        audioFiles.clear(); receive.dispose(); visibility.dispose();
+      });
     },
   };
   context.subscriptions.push(log,

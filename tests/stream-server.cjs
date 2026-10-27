@@ -45,7 +45,7 @@ const server = http.createServer((req, res) => {
       }).map(([key, value]) => [key, `${origin}/${value}`])) });
     res.setHeader('Content-Type', 'text/html');
     const theme = url.searchParams.get('theme') === 'light' ? 'vscode-light' : 'vscode-dark';
-    res.end(html.replace('<body>', `<body class="${theme}"><script nonce="qa">window.acquireVsCodeApi=()=>({getState:()=>null,setState:()=>{},postMessage:m=>fetch('/diagnostic',{method:'POST',body:JSON.stringify(m)})});window.addEventListener('error',e=>fetch('/diagnostic',{method:'POST',body:e.message}));</script>`)); return;
+    res.end(html.replace('<body id="player">', `<body id="player" class="${theme}"><script nonce="qa">window.acquireVsCodeApi=()=>({getState:()=>null,setState:()=>{},postMessage:m=>fetch('/diagnostic',{method:'POST',body:JSON.stringify(m)})});window.addEventListener('error',e=>fetch('/diagnostic',{method:'POST',body:e.message}));</script>`)); return;
   }
   const file = url.pathname.startsWith('/source/') ? files[Number(url.pathname.slice(8))] : path.join(__dirname, '../media', path.basename(url.pathname));
   if (!file || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404); res.end(); return; }

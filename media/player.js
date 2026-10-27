@@ -5,18 +5,25 @@ import { FloatingOverlay } from './floating-overlay.js';
 import { attachEnvelope } from './envelope.js';
 import { perspectiveAspects } from './view-settings.js';
 import { attachViewportResize } from './viewport-resize.js';
+import { AudioSwitcher } from './audio-switch.js';
+import { ChannelMapper } from './channel-mapper.js';
+import { createRouting } from './channel-routing.js';
 (() => {
   'use strict';
-  const api = acquireVsCodeApi();
+  const hostApi = acquireVsCodeApi();
   const $ = id => document.getElementById(id);
-  const disposeViewportResize = attachViewportResize($('stage'), $('viewport-resize'));
+  const sources = new Map([['primary', { id: 'primary', name: $('video').dataset.title || 'Original media',
+    url: $('video').dataset.source, file: hostApi.file }]]);
+  const api = { file: hostApi.file, setState: value => hostApi.setState(value), postMessage: value => hostApi.postMessage(value),
+    mediaSourceId: url => [...sources.values()].find(source => source.url === url)?.id };
+  const disposeViewportResize = attachViewportResize($('stage'), $('viewport-resize'), $('player-layout'), $('transport'));
   const video = new window.StreamPlayer($('video'), api); const canvas = $('overlay');
   attachEnvelope(video, $('seek-envelope'));
   const ctx = canvas.getContext('2d');
   const defaults = JSON.parse(video.dataset.defaults);
   let preferences = JSON.parse(video.dataset.preferences);
   const stats = { received: 0, discarded: 0, computeMs: 0, firstFrameMs: null, canPlayMs: null, stalls: 0 };
-  const monitor = new window.FoaMonitor(video, processingError, acceptMap);
+  let monitor = new window.FoaMonitor(video, processingError, acceptMap);
   const meters = new MeterOverlay(monitor, enabled => persist({ meter: enabled }));
   const overview = new FloatingOverlay('overview', enabled => {
     persist({ overview: enabled }); view?.setOverviewEnabled(enabled && overview.available);
@@ -25,6 +32,17 @@ import { attachViewportResize } from './viewport-resize.js';
   let projector; let projectionLoading; let projectionRequest = 0;
   let ready = false; let mappedAt = null; let lastMap; let processingIssue = false; let disposed = false;
   let switchingTrack = false;
+  let audioSource = 'primary', switchRequest = 0;
+  const mapper = new ChannelMapper(() => monitor, () => { lastMap = null; clear(); });
+  const audioSwitcher = new AudioSwitcher(video, api, {
+    monitor: () => monitor, settings: () => preferences, onError: processingError, onMap: acceptMap,
+    tracks(source, tracks) { source.tracks = tracks; metadata(); },
+    commit(next, source) {
+      monitor = next; meters.monitor = next;
+      if (view) view.monitor = next;
+      audioSource = source.id; processingIssue = false; lastMap = null; clear();
+    },
+  });
   let hasVideo = true; let sourceAspect = 2; let mediaDetail = 'Native media';
   $('projection').disabled = $('layout').disabled = $('rotation').disabled = true;
   function level(id) { $(id + '-value').textContent = Math.round(Number($(id).value) * 100) + '%'; }
@@ -140,7 +158,7 @@ import { attachViewportResize } from './viewport-resize.js';
     $('time').textContent = format(video.currentTime) + ' / ' + format(video.duration);
     $('seek').value = video.currentTime;
     $('seek').max = Number.isFinite(video.duration) ? video.duration : 0;
-    $('seek').disabled = switchingTrack || !Number.isFinite(video.duration) || video.duration <= 0;
+    $('seek').disabled = !Number.isFinite(video.duration) || video.duration <= 0;
   }
   function updateClock() {
     transport();
@@ -182,21 +200,31 @@ import { attachViewportResize } from './viewport-resize.js';
     diagnostic('DSP: ' + error.message);
   }
   function metadata() {
-    $('audio-track-control').hidden = video.audioTracks.length < 2;
-    $('audio-track').replaceChildren(...video.audioTracks.map(track => {
-      const label = [String(track.index + 1), track.name, track.language === 'und' ? '' : track.language,
-        track.channels + 'ch', track.codec, track.supported ? '' : 'unsupported'].filter(Boolean).join(' / ');
-      const option = new Option(label, String(track.index));
-      option.disabled = !track.supported; return option;
-    }));
-    $('audio-track').value = String(video.audioTrackIndex);
+    sources.get(audioSource).tracks = video.audioTracks;
+    const options = [];
+    for (const source of sources.values()) {
+      if (!source.tracks) continue;
+      for (const track of source.tracks) {
+        const label = [source.name, String(track.index + 1), track.name, track.language === 'und' ? '' : track.language,
+          track.channels + 'ch', track.codec, track.supported ? '' : 'unsupported'].filter(Boolean).join(' / ');
+        const option = new Option(label, JSON.stringify([source.id, track.index]));
+        option.disabled = !track.supported; options.push(option);
+      }
+      if (!source.tracks.length && source.id === 'primary') {
+        options.push(new Option(source.name + ' / No audio', JSON.stringify([source.id, null])));
+      }
+    }
+    $('audio-track').replaceChildren(...options);
+    $('audio-track').value = JSON.stringify([audioSource, video.audioTrackIndex >= 0 ? video.audioTrackIndex : null]);
     $('audio-track').title = $('audio-track').selectedOptions[0]?.textContent ?? '';
+    $('audio-track').disabled = $('audio-open').disabled = !ready;
     const bypass = video.channels > 0 && ![4, 6].includes(video.channels);
     const noAudio = video.channels === 0;
     for (const id of ['enabled', 'opacity', 'order', 'normalization', 'listening']) $(id).disabled = bypass || noAudio;
     updateMapControls();
     $('volume').disabled = $('mute').disabled = noAudio;
     meters.setAvailable(!noAudio);
+    mapper.sync();
     $('bypass-option').hidden = !bypass;
     $('no-audio-option').hidden = !noAudio;
     if (bypass || noAudio) {
@@ -222,7 +250,8 @@ import { attachViewportResize } from './viewport-resize.js';
   }
   function canPlay() {
     ready = true; $('empty').hidden = true;
-    $('play').disabled = switchingTrack; $('mute').disabled = video.channels === 0; transport();
+    $('audio-track').disabled = $('audio-open').disabled = false;
+    $('play').disabled = false; $('mute').disabled = video.channels === 0; transport();
     if (stats.canPlayMs === null) { stats.canPlayMs = performance.now(); diagnostic('Streaming canplay: ' + stats.canPlayMs.toFixed(1) + ' ms'); }
   }
   video.addEventListener('loadedmetadata', metadata);
@@ -231,6 +260,8 @@ import { attachViewportResize } from './viewport-resize.js';
   video.addEventListener('durationchange', transport);
   function mediaError() {
     ready = false; reset();
+    mapper.sync();
+    $('audio-track').disabled = $('audio-open').disabled = true;
     const message = 'Playback failed: ' + (video.error?.message || 'codec or resource unavailable');
     $('empty').hidden = false; $('status').textContent = message; $('retry').hidden = false;
     diagnostic(message);
@@ -270,18 +301,34 @@ import { attachViewportResize } from './viewport-resize.js';
     persist({ muted: monitor.muted });
   });
   $('listening').addEventListener('change', () => { monitor.setMode($('listening').value); persist({ listening: $('listening').value }); updateDetail(); });
-  $('audio-track').addEventListener('change', async () => {
-    switchingTrack = true; $('audio-track').disabled = $('play').disabled = true;
-    processingIssue = false; reset(); transport();
+  async function switchAudio(source, index) {
+    if (!source) return;
+    const request = ++switchRequest;
+    switchingTrack = true;
+    $('audio-switch-status').hidden = false;
+    $('audio-switch-status').textContent = 'Loading audio: ' + source.name;
+    $('audio-options').setAttribute('aria-busy', 'true');
     try {
-      await monitor.selectAudioTrack(Number($('audio-track').value));
+      await audioSwitcher.select(source, index);
       $('retry').hidden = true; updateDetail();
-    } catch (error) { processingError(error); }
-    finally {
-      switchingTrack = false; $('audio-track').disabled = false;
-      $('play').disabled = !!video.error; transport();
+      if (request === switchRequest) $('audio-switch-status').hidden = true;
+    } catch (error) {
+      if (request === switchRequest && !disposed) {
+        $('audio-switch-status').textContent = 'Audio unchanged: ' + error.message;
+        metadata();
+      }
     }
+    finally {
+      if (request === switchRequest) {
+        switchingTrack = false; $('audio-options').setAttribute('aria-busy', 'false'); transport();
+      }
+    }
+  }
+  $('audio-track').addEventListener('change', () => {
+    const [sourceId, index] = JSON.parse($('audio-track').value);
+    return switchAudio(sources.get(sourceId), index ?? undefined);
   });
+  $('audio-open').addEventListener('click', () => api.postMessage({ type: 'select-audio' }));
   $('enabled').addEventListener('change', () => { monitor.setEnabled($('enabled').checked); lastMap = null; clear(); persist({ enabled: $('enabled').checked }); updateDetail(); });
   function updateMapControls() {
     $('mapAlgorithm').disabled = ![4, 6].includes(video.channels);
@@ -343,27 +390,40 @@ import { attachViewportResize } from './viewport-resize.js';
     });
   }
   $('reset-view').addEventListener('click', () => view?.reset());
-  $('reset-settings').addEventListener('click', () => { persist({ ...defaults }); applyPreferences(); });
-  $('order').addEventListener('change', () => { monitor.setOrder($('order').value); lastMap = null; clear(); persist({ order: $('order').value }); updateDetail(); });
+  $('reset-settings').addEventListener('click', () => {
+    monitor.setChannelRouting(createRouting(video.channels));
+    persist({ ...defaults }); applyPreferences();
+  });
+  $('order').addEventListener('change', () => { monitor.setOrder($('order').value); lastMap = null; clear(); persist({ order: $('order').value }); updateDetail(); mapper.sync(); });
   $('normalization').addEventListener('change', () => {
     monitor.setNormalization($('normalization').value); lastMap = null; clear(); updateClock();
     persist({ normalization: $('normalization').value });
   });
   $('retry').addEventListener('click', () => location.reload());
-  window.addEventListener('message', ({ data }) => { if (data?.type === 'suspend') video.pause(); });
+  window.addEventListener('message', ({ data }) => {
+    if (data?.type === 'suspend') video.pause();
+    if (data?.type === 'audio-source' && data.source?.id && data.source.id !== 'primary') {
+      sources.set(data.source.id, { ...sources.get(data.source.id), ...data.source });
+      metadata();
+      void switchAudio(sources.get(data.source.id));
+    }
+    if (data?.type === 'audio-source-error') {
+      $('audio-switch-status').hidden = false; $('audio-switch-status').textContent = data.message;
+    }
+  });
   function dispose() {
     if (disposed) return;
-    disposed = true; disposeViewportResize(); projectionRequest++;
-    projector?.dispose(); view?.dispose(); monitor.dispose();
+    disposed = true; audioSwitcher.cancel(); disposeViewportResize(); projectionRequest++;
+    projector?.dispose(); view?.dispose(); monitor.dispose(); video.dispose();
   }
   window.addEventListener('pagehide', dispose);
-  window.__PANO_PLAYER__ = { monitor, dispose, get view() { return view; }, getState: () => ({
+  window.__PANO_PLAYER__ = { get monitor() { return monitor; }, dispose, get view() { return view; }, getState: () => ({
     ...stats, ready, generation: monitor.generation, currentTime: video.currentTime, paused: video.paused, mappedAt,
-    audioTracks: video.audioTracks, audioTrackIndex: video.audioTrackIndex, switchingTrack,
+    audioTracks: video.audioTracks, audioTrackIndex: video.audioTrackIndex, audioSource, switchingTrack,
     projection: hasVideo ? effectiveProjection() : 'audio', projectionMode: $('projection').value, preferences: { ...preferences }, layout: $('layout').value, listening: monitor.getState(), view: view?.getState(),
     videoQuality: (() => { const q = video.getVideoPlaybackQuality?.(); return q && { total: q.totalVideoFrames, dropped: q.droppedVideoFrames }; })(),
   }) };
-  applyPreferences(); icons(); layoutProjection(); requestAnimationFrame(tick);
+  applyPreferences(); mapper.sync(); icons(); layoutProjection(); requestAnimationFrame(tick);
   if (video.readyState >= 2) firstFrame();
   if (video.readyState >= 3) canPlay();
   if (video.error) mediaError();

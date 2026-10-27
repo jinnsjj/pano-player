@@ -2,6 +2,8 @@
 
 Inspected: 2026-09-24, PanoPlayer 0.4.31. Source review only; no external-audio prototype or playback validation was performed.
 
+Historical design note. The implementation added on 2026-10-26 uses an audio-only replacement worker, background prebuffering and a combined source/track menu. See [Media And Audio](REFERENCE.md#media-and-audio) for current behavior; the feasibility statements below describe the earlier source snapshot.
+
 ## Conclusion
 
 An audio file in another directory can be used as the video's replacement soundtrack without remuxing or changing either source file. This is feasible with the existing architecture, but is not implemented today. Initially scope this to files accessible on the same workspace host as the video, with WAV and FLAC as the first validation targets. Do not promise arbitrary codecs or local-to-remote file access.

@@ -32,6 +32,15 @@ runtime dependency.
   devices need their own codec and performance validation.
 - Open or drop one file at a time. MP4, WebM, WAV, FLAC, MOV and MKV are offered;
   the actual codec/profile must be decodable on that browser and machine.
+- The folder button in Audio adds a local audio source without replacing the
+  video. The single Track menu combines source filenames and tracks. New audio
+  prebuffers while playback continues; failed switches keep the old audio.
+  Sources share time zero and playback uses the shorter duration. File references
+  remain in memory only until the player is closed or reloaded.
+- Audio > Mapper opens the pre-render channel matrix, including FOA Solo and
+  HL Solo for six-channel sources. It changes routing without restarting playback.
+  Same-channel-count source switches retain the matrix; other layouts reset to
+  Direct. Mapping is session-local and is never saved in localStorage.
 - A `File` is structured-cloned to decoder/envelope workers. Mediabunny's
   `BlobSource` reads ranges from the local file without uploading it or buffering
   the entire compressed file in JavaScript memory. Decoding still consumes RAM;
@@ -43,6 +52,8 @@ runtime dependency.
   file again. The player's Retry button reloads the current in-memory selection.
 - A new same-origin iframe owns each player session. Replacing/closing a file
   disposes its audio graph, workers and renderer before removing that frame.
+- The video and transport remain fixed. Only the lower settings and media
+  information scroll; the playback-height divider reserves space for that area.
 - Below 560 px, analysis panels flow below the settings instead of floating
   over playback controls. On larger screens they remain draggable overlays.
 - On Pages, the browser fetches application assets from the host. Local media

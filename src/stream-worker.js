@@ -16,12 +16,15 @@ function position(time) {
   audio = audioSink?.samples(time - .12);
   video = videoSink?.samples(time);
 }
-async function open(url, libav, selectedTrack, time = 0, envelope = false, file) {
-  input?.dispose();
-  input = new Input({ formats: ALL_FORMATS, source: file ? new BlobSource(file) : new UrlSource(url, {
+function createInput(url, file) {
+  return new Input({ formats: ALL_FORMATS, source: file ? new BlobSource(file) : new UrlSource(url, {
     maxCacheSize: 8 * 1024 * 1024, getRetryDelay: attempt => attempt < 2 ? .25 : null,
     handleUnhandledError: error => send({ type: 'error', message: error.message }),
   }) });
+}
+async function open(url, libav, selectedTrack, time = 0, envelope = false, file, audioOnly = false) {
+  input?.dispose();
+  input = createInput(url, file);
   const tracks = await input.getAudioTracks();
   const audioTracks = await Promise.all(tracks.map(async (track, index) => {
     const config = await track.getDecoderConfig().catch(() => null);
@@ -37,8 +40,9 @@ async function open(url, libav, selectedTrack, time = 0, envelope = false, file)
   const audioTrackIndex = selectedTrack ?? (audioTracks[primaryIndex]?.supported ? primaryIndex : audioTracks.findIndex(track => track.supported));
   const audioTrack = tracks[audioTrackIndex];
   if (tracks.length && !audioTrack) throw new Error('No supported audio track found.');
-  const videoTrack = await input.getPrimaryVideoTrack();
-  if (!audioTrack && !videoTrack) throw new Error('No audio or video track found.');
+  const sourceVideoTrack = await input.getPrimaryVideoTrack();
+  const videoTrack = audioOnly ? null : sourceVideoTrack;
+  if (!audioTrack && !sourceVideoTrack) throw new Error('No audio or video track found.');
   const config = await audioTrack?.getDecoderConfig();
   if (audioTrack?.codec === 'aac') {
     // VS Code resource service workers support fetch, not cross-origin importScripts.
@@ -60,9 +64,10 @@ async function open(url, libav, selectedTrack, time = 0, envelope = false, file)
   rate = config?.sampleRate ?? 0;
   const videoConfig = await videoTrack?.getDecoderConfig();
   audioSink = audioTrack ? new AudioSampleSink(audioTrack) : undefined;
+  const duration = await input.getDurationFromMetadata();
   if (envelope) {
     try {
-      await scanEnvelope(audioSink, await input.getDurationFromMetadata(), channelCount,
+      await scanEnvelope(audioSink, duration, channelCount,
         (channels, done) => send({ type: 'envelope', channels, done }));
     } finally { input.dispose(); }
     return;
@@ -72,7 +77,7 @@ async function open(url, libav, selectedTrack, time = 0, envelope = false, file)
   send({ type: 'metadata', sampleRate: rate, channels: channelCount, codec: audioTrack?.codec ?? null,
     audioTracks, audioTrackIndex,
     width: videoConfig?.codedWidth || 0, height: videoConfig?.codedHeight || 0,
-    duration: await input.getDurationFromMetadata() });
+    duration });
 }
 async function pullAudio(generation) {
   if (!audio) return;
@@ -82,7 +87,7 @@ async function pullAudio(generation) {
   while (length < buffers[0].length) {
     if (!pendingAudio) {
       const result = await iterator.next();
-      if (generation !== epoch) { result.value?.close(); return; }
+      if (generation !== epoch || iterator !== audio) { result.value?.close(); return; }
       if (result.done) { eof = true; break; }
       pendingAudio = result.value;
     }
@@ -116,10 +121,15 @@ async function pullVideo(generation) {
   } finally { sample.close(); }
 }
 self.onmessage = ({ data }) => {
+  if (data.type === 'drop-audio') {
+    void audio?.return().catch(() => {}); audio = audioSink = undefined;
+    pendingAudio?.close(); pendingAudio = undefined;
+    return;
+  }
   if (data.type === 'open') epoch = data.epoch ?? 0;
   if (data.type === 'seek') { epoch = data.epoch; position(data.time); return; }
   if (data.epoch !== epoch && data.type !== 'open') return;
   const generation = epoch;
-  const task = data.type === 'open' ? open(data.url, data.libav, data.audioTrackIndex, data.time, data.envelope, data.file) : data.type === 'audio' ? pullAudio(generation) : pullVideo(generation);
-  void task.catch(error => { if (generation === epoch) send({ type: 'error', message: error.message }); });
+  const task = data.type === 'open' ? open(data.url, data.libav, data.audioTrackIndex, data.time, data.envelope, data.file, data.audioOnly) : data.type === 'audio' ? pullAudio(generation) : pullVideo(generation);
+  void task.catch(error => { if (generation === epoch && (data.type !== 'audio' || audio)) send({ type: 'error', message: error.message }); });
 };

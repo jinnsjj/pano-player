@@ -1,6 +1,6 @@
 # PanoPlayer Validation
 
-Source version: 0.4.26. Updated 2026-09-21.
+Source version: 0.4.35. Updated 2026-10-27.
 
 ## Naming
 
@@ -25,6 +25,19 @@ links, absence of obsolete runtime identifiers and exclusion of nested VSIX arch
 FFmpeg/libav objects must be fetched through Git LFS before packaging.
 
 ## Acceptance Boundary
+
+Version 0.4.35: 133 automated checks passed, one optional codec fixture test skipped;
+the static web build and its six host/build checks passed. Local Chrome regressions
+cover source/track switching during playback, external audio, cancellation and
+failure rollback without pausing, seeking or replacing the video decoder.
+Channel-mapper checks cover numeric labels, pre-render routing, FOA/HL solo levels,
+PowerMap isolation, live edits and mapping inheritance across source changes.
+Scrolling checks cover fixed video/transport bounds under wheel, keyboard and focus
+scrolling, reachable settings menus and manual resize limits in both the web iframe
+and shared extension HTML at 1440x900, 1280x500, 390x844 and 320x568. Perspective
+canvas pixels remain nonblank and playback continues. No browser JavaScript errors
+were recorded. This does not establish sample-exact ABX switching, subjective
+click-free playback, or installed desktop/Remote-SSH acceptance for this version.
 
 Version 0.4.26: 84 automated checks passed, one optional codec test skipped.
 PWD matches independent time-domain steered beam energy; MUSIC checks cover

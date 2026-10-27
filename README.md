@@ -43,6 +43,8 @@ A standalone static web player shares the extension's playback, projection, FOA 
 
 **FOA+HL** treats six-channel audio as four FOA channels followed by head-locked left/right (channels 5/6). HL is mixed into both Binaural and Stereo Monitor without camera rotation or FOA normalization, follows volume/mute, and is excluded from PowerMap. Six-channel speaker-layout audio such as 5.1 is not supported as surround audio.
 
+**Audio > Mapper** opens a pre-render channel routing matrix. Select **FOA Solo** to keep channels 1-4 or **HL Solo** to keep channels 5/6 of a six-channel source. Output rows and input columns support channel swaps, duplication, summing and silent outputs. **Direct** restores one-to-one routing; turning **Enabled** off bypasses the mapping without losing it. Changes take effect during playback without seeking or rebuilding the video.
+
 Choose **WYZX / WXYZ** channel order and **SN3D / N3D** normalization independently, without reopening the file.
 
 > Four channels do not automatically mean FOA. Spatial processing expects first-order Ambisonics, not ordinary quadraphonic speaker audio. PowerMap is for qualitative direction review; the MUSIC source count is an assumption, not automatic detection. It is not a calibrated sound-pressure measurement or source-separation tool.
@@ -114,9 +116,13 @@ are not supported.
 - **No extra decoder setup**: no user-installed FFmpeg, FFprobe, Python, server, or port forwarding.
 - **Source files stay unchanged**, and media is not uploaded to third-party processing services.
 
-For media with multiple audio tracks, choose **Audio > Track**. Track names, languages, channel counts and codecs help identify each track. Switching retains the playback position and play/pause state; four-channel FOA and six-channel FOA+HL tracks use spatial processing, and other channel counts use Bypass. Each file starts with its primary supported audio track; track selection is not saved across files.
+**Audio > Track** combines source filenames and their tracks in one menu, including track names, languages, channel counts and codecs. The folder button adds audio from another WAV, FLAC, MP4, WebM, MOV or MKV file; choose an entry from the original file to switch back. Four-channel FOA and six-channel FOA+HL tracks use spatial processing, and other channel counts use Bypass. Sources and track choices last only for the current session.
+
+Switching prepares the new audio in the background while the current audio and video continue playing. The replacement takes over at the current time with a short gain transition, without restarting the video decoder or clearing the picture. Paused playback stays paused; a failed load leaves the current audio intact. External audio shares time zero with the video, without automatic content alignment or a manual offset. Playback uses the shorter of the original media and selected audio durations.
 
 The seek bar shows a separate envelope for every decoded source channel, generated progressively in the background. Rows adapt to the channel count within the existing control-bar height; changing tracks replaces the envelope. A shared square-root amplitude scale keeps quieter channels visible without normalizing each channel independently.
+
+Mapping keeps the source channel count unchanged and runs before FOA channel-order conversion, normalization, binaural/stereo rendering and HL mixing. PowerMap follows mapped FOA, while envelopes remain original-source data. Mappings are session-local: same-channel-count track/source switches retain them; a different channel count starts with Direct. Multiple inputs sum at unity gain without automatic attenuation or limiting and may clip.
 
 Video decoding depends on the host browser's WebCodecs support. Perspective view, EAC, rotation and single-eye cropping require WebGL2. Audio playback supports up to the browser's 32-channel limit; higher-channel sources can still display envelopes when their codec is supported. Output channel mapping depends on Web Audio and the playback device. FuMa normalization and arbitrary cube-face layouts are not supported.
 

@@ -3,17 +3,21 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const { buildSync } = require('esbuild');
 const { defaults, normalize } = require('../src/preferences.cjs');
+const routingModule = { exports: {} };
+vm.runInNewContext(buildSync({ entryPoints: [require.resolve('../media/channel-routing.js')], bundle: true,
+  write: false, format: 'cjs' }).outputFiles[0].text, { module: routingModule, exports: routingModule.exports });
+const { createRouting, copyRouting, validRouting } = routingModule.exports;
 function setup(saved = {}) {
   let persisted, onMap, onError, frame;
   const elements = new Map(), messages = [], listeners = {};
   const get = id => {
     if (!elements.has(id)) elements.set(id, {
-      value: '.75', checked: true, paused: true, currentTime: 0, duration: 10, readyState: 4,
+      value: '.75', checked: true, disabled: false, paused: true, currentTime: 0, duration: 10, readyState: 4,
       audioTracks: [], selectedOptions: [], replaceChildren(...options) { this.options = options; },
       videoWidth: 960, videoHeight: 480, dataset: { defaults: JSON.stringify(defaults), preferences: JSON.stringify(normalize(saved)) }, style: { setProperty(k, v) { this[k] = v; } },
       listeners: {}, addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
       fire(type, event = {}) { for (const fn of this.listeners[type] || []) fn(event); },
-      width: 2048, height: 1024,
+      width: 2048, height: 1024, clientHeight: 800,
       getContext: () => ({ clearRect() {}, putImageData() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, strokeText() {}, fillText() {} }),
       attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, load() {}, render() {},
       parentElement: { clientWidth: 1280 },
@@ -23,18 +27,25 @@ function setup(saved = {}) {
       contains(target) { return target === this; },
       getBoundingClientRect() { return { x: 100, y: 76, top: 76, bottom: 224, right: 340, width: 240, height: 148 }; },
       pause() { this.paused = true; }, play() { this.paused = false; return Promise.resolve(); },
+      useAudioSession(session) { this.audioTrackIndex = session.audioTrackIndex; this.channels = session.channels; this.fire('loadedmetadata'); },
     });
     return elements.get(id);
   };
   const window = { innerWidth: 1280, innerHeight: 800, addEventListener(type, fn) { listeners[type] = fn; } };
-  window.StreamPlayer = class { constructor(element) { return element; } };
+  window.StreamPlayer = class {
+    constructor(element, options) {
+      if (!options.audioOnly) return element;
+      return { dataset: element.dataset, audioTrackIndex: options.audioTrackIndex, channels: 4,
+        time: options.time, duration: 10, endFrame: (options.time + 2) * 48000, sampleRate: 48000,
+        alignAudio() {}, async play() {}, dispose() {} };
+    }
+  };
   window.FoaMonitor = class {
     generation = 0; ready = false;
-    constructor(video, error, map) { onError = error; onMap = map; }
-    prepare() { return new Promise(() => {}); }
+    constructor(video, error, map) { this.video = video; onError = error; onMap = map; }
+    prepare() { return this.video === get('video') ? new Promise(() => {}) : Promise.resolve(); }
     resume() { return this.prepare(); }
     reset() { this.generation++; }
-    async selectAudioTrack(index) { get('video').audioTrackIndex = index; }
     setOrder(order) { this.order = order; this.reset(); }
     setNormalization(value) { this.normalization = value; this.reset(); }
     setEnabled(value) { this.enabled = value; this.reset(); }
@@ -42,6 +53,11 @@ function setup(saved = {}) {
     setVolume(value) { this.volume = value; } setMode(value) { this.mode = value; }
     setMuted(value) { this.muted = value; } dispose() {} getState() { return { ready: false, mode: this.mode, volume: this.volume, muted: this.muted }; }
     setMeterEnabled(enabled) { this.meterEnabled = enabled; }
+    getChannelRouting() {
+      if (!validRouting(this.routing, this.video.channels || 0)) this.routing = createRouting(this.video.channels || 0);
+      return copyRouting(this.routing);
+    }
+    setChannelRouting(value) { if (!validRouting(value, this.video.channels || 0)) return false; this.routing = copyRouting(value); this.reset(); this.resetMeter(); return true; }
     resetMeter() { this.meterData = null; }
     getMeterState() { return { data: this.meterData, active: true, status: 'ready' }; }
   };
@@ -60,7 +76,8 @@ function setup(saved = {}) {
     render() { return false; } dispose() {}
   };
   vm.runInNewContext(buildSync({ entryPoints: [require.resolve('../media/player.js')], bundle: true, write: false }).outputFiles[0].text, {
-    window, document: { getElementById: get }, performance, AbortController,
+    window, document: { getElementById: get, createElement: () => ({ dataset: {} }) }, performance, AbortController,
+    setTimeout, clearTimeout, DOMException,
     ResizeObserver: class { observe() {} disconnect() {} },
     getComputedStyle: element => ({ paddingLeft: '24', paddingRight: '24', getPropertyValue: key => element.style?.[key] || '2' }),
     Option: class { constructor(text, value) { this.textContent = text; this.value = value; } },
@@ -70,19 +87,45 @@ function setup(saved = {}) {
   return { get, messages, onMap, onError, tick: now => frame(now), monitor: window.__PANO_PLAYER__.monitor,
     persisted: () => persisted, state: () => window.__PANO_PLAYER__.getState() };
 }
-test('audio track selector lists metadata safely, hides for single tracks and does not persist selection', async () => {
+test('channel mapper presets, bypass and reset remain session-local and adapt to channel changes', () => {
   const s = setup(), video = s.get('video');
-  assert.equal(s.get('audio-track-control').hidden, true);
+  video.channels = 6; video.fire('loadedmetadata');
+  assert.equal(s.get('mapper-open').disabled, false);
+  s.get('mapper-panel').hidden = true;
+  s.get('mapper-open').fire('click');
+  assert.equal(s.get('mapper-panel').hidden, false);
+  assert.equal(s.get('mapper-open').attributes['aria-expanded'], 'true');
+  s.get('mapper-preset').value = 'foa'; s.get('mapper-preset').fire('change');
+  assert.equal(s.monitor.getChannelRouting().matrix[5][5], 0);
+  assert.equal(s.get('mapper-summary').textContent, 'FOA Solo');
+  s.get('mapper-enabled').checked = false; s.get('mapper-enabled').fire('change');
+  assert.equal(s.monitor.getChannelRouting().enabled, false);
+  assert.equal(s.get('mapper-summary').textContent, 'Bypassed');
+  assert.ok(!s.messages.some(message => message.type === 'preferences'), 'Routing never enters cross-file preferences');
+  s.get('reset-settings').fire('click');
+  assert.equal(s.monitor.getChannelRouting().matrix[5][5], 1);
+  s.get('mapper-preset').value = 'hl'; s.get('mapper-preset').fire('change');
+  video.channels = 2; video.fire('loadedmetadata');
+  assert.equal(s.get('mapper-hl').disabled, true);
+  assert.equal(s.get('mapper-summary').textContent, 'Direct');
+  s.get('mapper-panel').fire('keydown', { key: 'Escape', preventDefault() {} });
+  assert.equal(s.get('mapper-panel').hidden, true);
+  video.channels = 0; video.fire('loadedmetadata');
+  assert.equal(s.get('mapper-open').disabled, true);
+});
+test('one audio selector combines source and track safely without persisting selection', async () => {
+  const s = setup(), video = s.get('video');
+  assert.equal(s.get('audio-track').options.length, 1);
+  assert.match(s.get('audio-track').options[0].textContent, /No audio/);
   video.audioTracks = [
     { index: 0, name: '<Stereo>', language: 'eng', channels: 2, codec: 'aac', supported: true },
     { index: 1, name: 'FOA', language: 'und', channels: 4, codec: 'opus', supported: true },
     { index: 2, name: 'Surround', channels: 6, supported: false },
   ];
   video.audioTrackIndex = 0; video.fire('loadedmetadata');
-  assert.equal(s.get('audio-track-control').hidden, false);
-  assert.match(s.get('audio-track').options[0].textContent, /<Stereo>.*eng.*2ch.*aac/);
+  assert.match(s.get('audio-track').options[0].textContent, /Original media.*<Stereo>.*eng.*2ch.*aac/);
   assert.equal(s.get('audio-track').options[2].disabled, true);
-  s.get('audio-track').value = '1';
+  s.get('audio-track').value = '["primary",1]';
   await s.get('audio-track').listeners.change[0]();
   assert.equal(video.audioTrackIndex, 1); assert.equal(s.get('audio-track').disabled, false);
   assert.equal(s.messages.some(message => message.type === 'preferences'), false);

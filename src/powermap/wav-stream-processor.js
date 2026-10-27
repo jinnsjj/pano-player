@@ -1,3 +1,5 @@
+import { ChannelMatrix } from '../channel-matrix.js';
+
 class WavStreamProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
@@ -6,6 +8,7 @@ class WavStreamProcessor extends AudioWorkletProcessor {
     if (!Number.isInteger(this.channels) || this.channels < 1 || this.channels > 32) throw new Error('Unsupported PCM channel count.');
     this.sourceSampleRate = Math.max(1, Number(config.sourceSampleRate) || sampleRate);
     this.outputSampleRate = sampleRate;
+    this.mapper = new ChannelMatrix(this.channels, sampleRate);
     this.ratio = this.sourceSampleRate / this.outputSampleRate;
     this.capacityFrames = Math.max(1024, Number(config.capacityFrames) || this.sourceSampleRate * 12);
     this.lowWatermarkFrames = Math.min(
@@ -36,6 +39,9 @@ class WavStreamProcessor extends AudioWorkletProcessor {
     if (message?.type === 'seek') this.epoch = message.epoch ?? this.epoch;
     if (message?.epoch !== undefined && message.epoch !== this.epoch) return;
     switch (message?.type) {
+      case 'routing':
+        this.mapper.configure(message.routing, this.playing);
+        break;
       case 'chunk':
         this.appendChunk(message.channels);
         break;
@@ -52,6 +58,18 @@ class WavStreamProcessor extends AudioWorkletProcessor {
       case 'seek':
         this.reset(Number(message.frame) || 0);
         break;
+      case 'align': {
+        // Keep the prebuffered PCM; discard only the elapsed prefix at handoff.
+        const skip = Math.round(message.frame) - this.sourceFrame;
+        if (!Number.isFinite(skip) || skip < 0 || skip >= this.availableFrames) {
+          this.port.postMessage({ type: 'error', message: 'Audio handoff is outside the buffered range.', epoch: this.epoch });
+          break;
+        }
+        this.readIndex = (this.readIndex + skip) % this.capacityFrames;
+        this.availableFrames -= skip; this.sourceFrame += skip; this.phase = 0;
+        this.needDataSignaled = false;
+        break;
+      }
       default:
         break;
     }
@@ -116,8 +134,9 @@ class WavStreamProcessor extends AudioWorkletProcessor {
     for (let channel = 0; channel < output.length; channel += 1) {
       const current = this.buffers[channel][this.readIndex];
       const next = interpolate ? this.buffers[channel][nextIndex] : current;
-      output[channel][outputFrame] = current + (next - current) * this.phase;
+      this.mapper.samples[channel] = current + (next - current) * this.phase;
     }
+    this.mapper.render(output, outputFrame);
     const nextPhase = this.phase + this.ratio;
     const consumed = Math.floor(nextPhase);
     this.phase = nextPhase - consumed;

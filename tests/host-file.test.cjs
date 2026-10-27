@@ -26,6 +26,30 @@ test('host media reads exact bounded offsets from only its owned file', async ()
   } finally { media.dispose(); await fs.rm(dir, { recursive: true, force: true }); }
 });
 
+test('concurrent host fetchers route original and external audio without request-ID collisions', async () => {
+  const bundle = buildSync({ entryPoints: [path.join(__dirname, '../src/host-fetch.js')],
+    bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
+  const window = new EventTarget();
+  const context = { module: { exports: {} }, exports: {}, window, ReadableStream, Response,
+    Headers, Uint8Array, DOMException, fetch: () => { throw new Error('Unselected network resource'); } };
+  vm.runInNewContext(bundle, context);
+  const messages = [], abort = new AbortController();
+  const api = { mediaSourceId: url => url === 'pano-audio:external' ? 'external' : undefined,
+    postMessage(message) {
+      messages.push(message);
+      queueMicrotask(() => window.dispatchEvent(new MessageEvent('message', { data: {
+        type: 'media-range', id: message.id, size: 1, data: Uint8Array.of(message.sourceId === 'primary' ? 1 : 2).buffer,
+      } })));
+    } };
+  const primary = context.module.exports.createHostFetch(api, 'media:original', abort.signal);
+  const external = context.module.exports.createHostFetch(api, 'media:original', abort.signal);
+  const [a, b] = await Promise.all([primary('media:original'), external('pano-audio:external')]);
+  assert.equal(new Uint8Array(await a.arrayBuffer())[0], 1);
+  assert.equal(new Uint8Array(await b.arrayBuffer())[0], 2);
+  assert.equal(new Set(messages.map(message => message.id)).size, 2);
+  abort.abort();
+});
+
 test('host fetch streams exact bytes across successive blocks and cancels without reading the whole file', async () => {
   const bundle = buildSync({ entryPoints: [path.join(__dirname, '../src/host-fetch.js')],
     bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;

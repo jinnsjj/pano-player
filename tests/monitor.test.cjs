@@ -2,43 +2,28 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const { buildSync } = require('esbuild');
-function monitor(globals = {}) {
+function monitor(globals = {}, options = {}) {
   const module = { exports: {} };
   const built = buildSync({ entryPoints: [require.resolve('../src/browser-monitor.js')], bundle: true, write: false, format: 'cjs', logLevel: 'silent' });
   vm.runInNewContext(built.outputFiles[0].text, { module, exports: module.exports, AbortController, performance, console, URL, Float32Array, ...globals });
   const video = { paused: false, seeking: false, readyState: 4, currentTime: 2, listeners: {},
     addEventListener(type, fn) { this.listeners[type] = fn; } };
   const errors = [], maps = [];
-  const m = new module.exports.FoaMonitor(video, error => errors.push(error.message), map => maps.push(map));
+  const m = new module.exports.FoaMonitor(video, error => errors.push(error.message), map => maps.push(map), options);
   return { m, video, errors, maps };
 }
-test('track switching rebuilds audio routes, clears analysis and preserves preferences and play state', async () => {
-  for (const paused of [false, true]) {
-    const { m, video } = monitor();
-    let closed = 0, released = 0, initialized = 0;
-    video.paused = paused; video.audioTrackIndex = 0;
-    video.audioTracks = [{ supported: true }, { supported: true }];
-    video.pause = () => { video.paused = true; };
-    video.play = async () => { video.paused = false; };
-    video.selectAudioTrack = async index => { video.audioTrackIndex = index; video.channels = 4; };
-    m.context = { close: async () => { closed++; } };
-    m.service = { dispose() { released++; }, reset() {} };
-    m.bypass = true; m.ready = true; m.meterData = { duration: 9 }; m.headlocked = {};
-    m.volume = .4; m.muted = true; m.order = 'WXYZ'; m.normalization = 'N3D';
-    m.initialize = async () => {
-      assert.equal(m.bypass, false); assert.equal(m.source, undefined); assert.equal(m.service, undefined);
-      assert.equal(m.headlocked, undefined);
-      initialized++; m.ready = true; m.channelCount = video.channels;
-    };
-    await m.selectAudioTrack(1);
-    assert.equal(closed, 1); assert.equal(released, 1); assert.equal(initialized, 1);
-    assert.equal(video.paused, paused); assert.equal(video.currentTime, 2);
-    assert.equal(m.channelCount, 4); assert.equal(m.meterData, null);
-    assert.equal(m.volume, .4); assert.equal(m.muted, true);
-    assert.equal(m.order, 'WXYZ'); assert.equal(m.normalization, 'N3D');
-    await m.selectAudioTrack(1); assert.equal(initialized, 1);
-    await assert.rejects(m.selectAudioTrack(-1), /Unsupported/);
-  }
+test('a preloading audio route neither suspends nor closes the shared live AudioContext', async () => {
+  let suspended = 0, closed = 0;
+  const context = { createGain: () => ({ gain: {}, connect() {}, disconnect() {} }),
+    async suspend() { suspended++; }, async close() { closed++; } };
+  const { m, video } = monitor({}, { context, preloading: true });
+  video.paused = true; video.channels = 2; video.metadata = Promise.resolve();
+  video.attach = async () => { video.node = { disconnect() {} }; };
+  m.setMuted(true); await m.prepare();
+  assert.equal(m.context, context); assert.equal(m.fallback.gain.value, 0);
+  assert.equal(suspended, 0);
+  m.dispose({ preserveVideo: true, preserveContext: true });
+  assert.equal(closed, 0);
 });
 test('non-FOA channel counts attach straight to gain without initializing FOA DSP and remain camera-independent', async () => {
   for (const channels of [1, 2, 3, 8, 16, 32]) {
@@ -148,6 +133,25 @@ test('normalization changes reset stale frames without reopening media', async (
   m.setNormalization('FuMa');
   assert.equal(m.normalization, 'N3D');
   assert.equal(m.generation, 1);
+});
+test('channel routing reaches the pre-render PCM path, resets analysis, and rejects incompatible layouts', () => {
+  const { m, video } = monitor();
+  video.channels = 6;
+  const sent = []; video.setChannelRouting = routing => sent.push(routing);
+  const routing = m.getChannelRouting();
+  routing.matrix[4][4] = routing.matrix[5][5] = 0;
+  const generation = m.generation;
+  m.meterData = { duration: 5 };
+  assert.equal(m.setChannelRouting(routing), true);
+  assert.equal(sent.length, 1); assert.equal(sent[0].matrix[4][4], 0);
+  assert.equal(m.generation, generation + 1); assert.equal(m.meterData, null);
+  assert.equal(video.currentTime, 2); assert.equal(video.paused, false);
+  routing.matrix[4][4] = 1;
+  assert.equal(m.getChannelRouting().matrix[4][4], 0, 'Caller cannot mutate active routing');
+  video.channels = 2;
+  assert.equal(m.setChannelRouting(routing), false);
+  assert.equal(m.getChannelRouting().channels, 2);
+  assert.equal(m.getChannelRouting().matrix[1][1], 1, 'New layouts start with direct routing');
 });
 test('PowerMap changes forward the method/source count and discard old results without resetting audio meters', async () => {
   const { m, video, maps } = monitor();

@@ -1,5 +1,7 @@
 import { PowermapService } from './powermap/powermap-service.js';
 import { colourizeMap } from './powermap/powermap-renderer.js';
+import { loadWorklet } from './audio-worklet.js';
+import { copyRouting, createRouting, validRouting } from '../media/channel-routing.js';
 
 async function loadScriptBlob(url, signal) {
   const response = await fetch(url, { signal });
@@ -8,12 +10,13 @@ async function loadScriptBlob(url, signal) {
 }
 
 export class FoaMonitor {
-  constructor(video, onError, onMap = () => {}) {
+  constructor(video, onError, onMap = () => {}, { context, preloading = false } = {}) {
     this.video = video; this.onError = onError; this.onMap = onMap;
     this.mode = 'binaural'; this.volume = 1; this.muted = false;
     this.order = 'WYZX'; this.enabled = false; this.generation = 0;
     this.mapAlgorithm = 'music'; this.mapSources = 1;
     this.normalization = 'SN3D';
+    this.sharedContext = context; this.preloading = preloading;
     this.ready = false; this.state = 'initializing'; this.channelCount = null;
     this.meterEnabled = false; this.meterEpoch = 0; this.meterData = null; this.meterStatus = 'off';
     this.events = new AbortController();
@@ -46,7 +49,7 @@ export class FoaMonitor {
         return;
       }
     }
-    this.context = new AudioContext();
+    this.context = this.sharedContext || new AudioContext();
     // The optional meter tap leaves all audible playback routes unchanged.
     this.meterInput = this.context.createGain();
     this.meterInput.channelCount = 2; this.meterInput.channelCountMode = 'explicit';
@@ -60,16 +63,15 @@ export class FoaMonitor {
         await this.video.attach(this.context, this.fallback);
         if (this.disposed) return;
         this.source = this.video.node; this.ready = true; this.state = 'bypass'; this.applyGain();
-        if (!this.video.paused) await this.context.resume(); else await this.context.suspend();
+        if (!this.preloading) {
+          if (!this.video.paused) await this.context.resume(); else await this.context.suspend();
+        }
         return;
       }
     }
     this.renderer = Omnitone.createFOARenderer(this.context, { channelMap: [0, 1, 2, 3] });
     const signal = this.events.signal;
-    const workletUrl = await loadScriptBlob(this.video.dataset.worklet, signal);
-    try {
-      await Promise.all([this.renderer.initialize(), this.context.audioWorklet.addModule(workletUrl)]);
-    } finally { URL.revokeObjectURL(workletUrl); }
+    await Promise.all([this.renderer.initialize(), loadWorklet(this.context, this.video.dataset.worklet)]);
     if (this.disposed) return;
     this.capture = new AudioWorkletNode(this.context, 'foa-capture-processor', {
       numberOfInputs: 1, numberOfOutputs: 2, outputChannelCount: [4, 2],
@@ -115,8 +117,10 @@ export class FoaMonitor {
       this.source.connect(this.capture); this.source.connect(this.fallback);
     }
     this.state = 'checking-channels'; this.applyGain();
-    if (!this.video.paused) await this.context.resume();
-    else await this.context.suspend();
+    if (!this.preloading) {
+      if (!this.video.paused) await this.context.resume();
+      else await this.context.suspend();
+    }
     this.mapLoading = this.initializeMap().catch(error => this.report(error));
   }
   async initializeMap() {
@@ -196,14 +200,25 @@ export class FoaMonitor {
     if (this.mode !== mode) this.resetMeter();
     this.mode = mode; this.applyGain();
   }
+  getChannelRouting() {
+    const channels = this.video.channels || 0;
+    if (!validRouting(this.routing, channels)) this.routing = createRouting(channels);
+    return copyRouting(this.routing);
+  }
+  setChannelRouting(routing) {
+    if (!validRouting(routing, this.video.channels || 0)) return false;
+    this.routing = copyRouting(routing);
+    this.video.setChannelRouting?.(this.routing);
+    this.reset(); this.resetMeter();
+    return true;
+  }
   setVolume(value) { this.volume = Math.max(0, Math.min(1, value)); this.applyGain(); }
-  setMuted(value) { this.muted = Boolean(value); this.applyGain(); }
+  setMuted(value, ramp = 0) { this.muted = Boolean(value); this.applyGain(ramp); }
   prepareMeter() {
     if (!this.context || this.disposed) return;
     return this.meterLoading ||= (async () => {
       this.meterStatus = 'loading';
-      const url = await loadScriptBlob(new URL('level-meter-processor.js', this.video.dataset.worklet).href, this.events.signal);
-      try { await this.context.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+      await loadWorklet(this.context, new URL('level-meter-processor.js', this.video.dataset.worklet).href);
       if (this.disposed) return;
       this.meterNode = new AudioWorkletNode(this.context, 'level-meter-processor', {
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
@@ -232,52 +247,36 @@ export class FoaMonitor {
     return { status: this.meterStatus, data: this.meterData, active: this.context?.state === 'running' &&
       !this.disposed && !this.video.paused && !this.video.seeking && !this.video.error };
   }
-  applyGain() {
+  applyGain(ramp = 0) {
     const volume = this.muted ? 0 : this.volume;
     this.video.volume = this.source ? 1 : volume;
-    if (this.fallback) this.fallback.gain.value = this.bypass || !this.ready ? volume : 0;
-    if (this.output) this.output.gain.value = this.ready && this.mode === 'binaural' ? volume : 0;
-    if (this.stereo) this.stereo.gain.value = this.ready && this.mode === 'stereo' ? volume : 0;
-    if (this.headlocked) this.headlocked.gain.value = this.ready && this.channelCount === 6 ? volume : 0;
+    for (const [node, value] of [[this.fallback, this.bypass || !this.ready ? volume : 0],
+      [this.output, this.ready && this.mode === 'binaural' ? volume : 0],
+      [this.stereo, this.ready && this.mode === 'stereo' ? volume : 0],
+      [this.headlocked, this.ready && this.channelCount === 6 ? volume : 0]]) {
+      if (!node) continue;
+      if (ramp && node.gain.linearRampToValueAtTime) {
+        const now = this.context.currentTime;
+        node.gain.cancelScheduledValues(now);
+        node.gain.setValueAtTime(node.gain.value, now);
+        node.gain.linearRampToValueAtTime(value, now + ramp);
+      } else node.gain.value = value;
+    }
   }
   async resume() { await this.prepare(); await this.context?.resume(); }
-  async selectAudioTrack(index) {
-    if (this.switchingTrack) return this.switchingTrack;
-    if (index === this.video.audioTrackIndex && !this.video.error) return;
-    if (!Number.isInteger(index) || !this.video.audioTracks?.[index]?.supported) throw new Error('Unsupported audio track.');
-    const playing = !this.video.paused;
-    this.video.pause();
-    this.switchingTrack = (async () => {
-      await this.initialized;
-      await Promise.all([this.mapLoading, this.meterLoading]);
-      if (this.disposed) return;
-      this.reset(); this.resetMeter(); this.service?.dispose();
-      if (this.capture) this.capture.port.onmessage = null;
-      if (this.meterNode) this.meterNode.port.onmessage = null;
-      await this.context?.close();
-      if (this.disposed) return;
-      for (const key of ['context', 'source', 'renderer', 'capture', 'output', 'fallback', 'stereo', 'headlocked',
-        'service', 'mapLoading', 'meterInput', 'meterNode', 'meterLoading', 'initialized']) this[key] = undefined;
-      this.ready = this.bypass = this.noAudio = false;
-      this.channelCount = null; this.state = 'initializing'; this.meterStatus = 'off';
-      await this.video.selectAudioTrack(index);
-      if (this.disposed) return;
-      await this.prepare();
-      if (this.video.error) throw this.video.error;
-      if (playing) await this.video.play();
-    })();
-    try { await this.switchingTrack; } finally { this.switchingTrack = undefined; }
-  }
-  dispose() {
+  dispose({ preserveVideo = false, preserveContext = false } = {}) {
+    if (this.disposed) return;
     this.disposed = true; this.events.abort(); this.service?.dispose();
-    this.video.dispose?.();
+    if (!preserveVideo) this.video.dispose?.();
     if (this.capture) this.capture.port.onmessage = null;
     if (this.meterNode) this.meterNode.port.onmessage = null;
-    void this.context?.close();
+    for (const key of ['source', 'capture', 'output', 'fallback', 'stereo', 'headlocked', 'meterInput', 'meterNode']) this[key]?.disconnect?.();
+    this.renderer?.output.disconnect();
+    if (!preserveContext) void this.context?.close();
   }
   getState() {
     return { mode: this.noAudio ? 'none' : this.bypass ? 'bypass' : this.mode, ready: this.ready, state: this.state, channels: this.channelCount,
-      normalization: this.normalization,
+      normalization: this.normalization, routing: this.getChannelRouting(),
       sampleRate: this.context?.sampleRate, time: this.video.currentTime, generation: this.generation,
       clock: this.noAudio ? 'video' : this.video.attach ? 'consumed-pcm' : 'native-media', contextState: this.context?.state };
   }

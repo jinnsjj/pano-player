@@ -64,10 +64,10 @@ const path = require('node:path');
     await frame.waitForFunction(() => Math.abs(__PANO_PLAYER__.getState().currentTime - 3) < .2);
     const tracks = await frame.evaluate(() => __PANO_PLAYER__.getState().audioTracks);
     if (tracks.length > 1) {
-      await frame.locator('#audio-track').selectOption('1');
+      await frame.locator('#audio-track').selectOption('["primary",1]');
       await frame.waitForFunction(() => __PANO_PLAYER__.getState().audioTrackIndex === 1 && !__PANO_PLAYER__.getState().switchingTrack);
       assert.ok(Math.abs((await frame.evaluate(() => __PANO_PLAYER__.getState())).currentTime - 3) < .2);
-      await frame.locator('#audio-track').selectOption('0');
+      await frame.locator('#audio-track').selectOption('["primary",0]');
       await frame.waitForFunction(() => __PANO_PLAYER__.getState().audioTrackIndex === 0 && !__PANO_PLAYER__.getState().switchingTrack);
     }
     await Promise.all([frame.waitForNavigation(), frame.locator('#retry').evaluate(button => button.click())]);

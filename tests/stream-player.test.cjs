@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 const { buildSync } = require('esbuild');
 
-test('local File reaches decoder, envelope and track reload; disposal terminates both workers', async () => {
+test('local File reaches decoder, envelope and independent audio replacement without replacing video', async () => {
   const bundle = buildSync({ entryPoints: [path.join(__dirname, '../src/stream-player.js')],
     bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
   const workers = [];
@@ -25,49 +25,50 @@ test('local File reaches decoder, envelope and track reload; disposal terminates
   player.receive(metadata);
   assert.equal(workers.length, 2);
   for (const worker of workers) assert.equal(worker.messages[0].file, file);
-  const reload = player.selectAudioTrack(1);
+  const replacement = new context.module.exports.StreamPlayer({ dataset: player.dataset },
+    { file, audioOnly: true, deferEnvelope: true, audioTrackIndex: 1, time: 1 });
   await new Promise(setImmediate);
-  player.receive({ ...metadata, epoch: 1, audioTrackIndex: 1 });
-  await reload;
-  assert.ok(workers[0].terminated && workers[1].terminated);
+  replacement.receive({ ...metadata, audioTrackIndex: 1 });
+  assert.equal(workers[2].messages[0].audioOnly, true);
+  assert.equal(workers[2].messages[0].time, 1);
+  assert.equal(workers[2].messages[0].audioTrackIndex, 1);
+  assert.equal(workers[0].terminated, undefined);
+  assert.equal(workers[1].terminated, undefined);
   for (const worker of workers) assert.equal(worker.messages[0].file, file);
-  player.dispose();
+  player.dispose(); replacement.dispose();
   assert.ok(workers.every(worker => worker.terminated));
 });
 
-test('track reload preserves time, releases old PCM and ignores stale worker messages', async () => {
+test('audio handoff retains video worker, pending frame and seek epoch while forwarding the new audio clock', async () => {
   const bundle = buildSync({ entryPoints: [path.join(__dirname, '../src/stream-player.js')],
     bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
-  const context = { module: { exports: {} }, exports: {}, window: {}, EventTarget, Event, AbortController, fetch };
+  const context = { module: { exports: {} }, exports: {}, window: {}, EventTarget, Event, AbortController, fetch, setTimeout };
   vm.runInNewContext(bundle, context);
   const { StreamPlayer } = context.module.exports;
   StreamPlayer.prototype.load = () => {};
   StreamPlayer.prototype.startEnvelope = () => {};
   const player = new StreamPlayer({ dataset: {} });
-  let terminated = 0, disconnected = 0, closed = 0;
-  player.worker = { terminate() { terminated++; } };
+  let disconnected = 0, closed = 0;
+  const messages = [];
+  const worker = player.worker = { postMessage(data) { messages.push(data); } };
   player.node = { disconnect() { disconnected++; }, port: { postMessage() {} } };
   player.audioTracks = [{ supported: true }, { supported: true }, { supported: false }];
-  player.audioTrackIndex = 0; player.time = 7; player.paused = false;
+  player.audioTrackIndex = 0; player.time = 7; player.paused = false; player.duration = 20;
   player.channels = 2; player.sampleRate = 44100;
   player.nextFrame = { frame: { close() { closed++; } } };
-  player.load = async () => {
-    player.receive({ type: 'metadata', epoch: player.epoch, channels: 4, sampleRate: 48000,
-      width: 0, height: 0, duration: 20, audioTracks: player.audioTracks, audioTrackIndex: 1 });
-  };
-  await assert.rejects(player.selectAudioTrack(2), /Unsupported/);
-  assert.equal(terminated, 0);
-  await player.selectAudioTrack(1);
-  assert.equal(terminated, 1); assert.equal(disconnected, 1); assert.equal(closed, 1);
-  assert.equal(player.time, 7); assert.equal(player.paused, true);
+  const replacement = new StreamPlayer({ dataset: {} });
+  Object.assign(replacement, { time: 7, paused: false, sampleRate: 48000, channels: 4,
+    duration: 30, audioTracks: player.audioTracks, audioTrackIndex: 1 });
+  player.useAudioSession(replacement);
+  assert.equal(player.worker, worker); assert.equal(closed, 0);
+  assert.equal(player.time, 7); assert.equal(player.paused, false);
   assert.equal(player.sampleRate, 48000); assert.equal(player.channels, 4);
-  assert.equal(player.node, undefined); assert.equal(player.epoch, 1);
-  player.receive({ type: 'error', epoch: 0, message: 'old decoder' });
+  assert.equal(player.node, undefined); assert.equal(player.epoch, 0);
+  assert.equal(messages[0].type, 'drop-audio'); assert.equal(player.duration, 20);
   player.receive({ type: 'audio', epoch: 0, channels: [] });
-  assert.equal(player.error, undefined);
-  player.ended = true;
-  await player.selectAudioTrack(0);
-  assert.equal(player.ended, true, 'Changing tracks at EOF must preserve replay-on-play');
+  replacement.time = 8; replacement.emit('timeupdate');
+  assert.equal(player.currentTime, 8);
+  await new Promise(resolve => setTimeout(resolve, 20)); assert.equal(disconnected, 1);
 });
 
 test('stream player closes stale frames, preserves seek epochs and bounds PCM prefetch', async () => {
@@ -96,6 +97,13 @@ test('stream player closes stale frames, preserves seek epochs and bounds PCM pr
   player.receive({ type: 'video', epoch: 0, time: 1, frame: { close() { closed++; } } });
   assert.equal(closed, 2); assert.equal(drawn, 1); assert.equal(player.currentTime, 10);
   assert.equal(player.epoch, 1);
+  const routing = { channels: 4, enabled: true, matrix: [[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]] };
+  const countBeforeRouting = messages.length;
+  assert.equal(player.setChannelRouting(routing), true);
+  assert.equal(messages.length, countBeforeRouting + 1);
+  assert.equal(messages.at(-1).type, 'routing');
+  assert.equal(player.epoch, 1); assert.equal(player.currentTime, 10);
+  assert.equal(player.setChannelRouting({ ...routing, channels: 6 }), false);
   player.receive({ type: 'audio', epoch: 0, channels: [] });
   assert.equal(player.eof, false);
   player.audioPending = false; player.endFrame = 13 * 48000;
