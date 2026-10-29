@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.36 - 2026-10-29
+
+### Added
+
+- Optional center crosshair with live azimuth and elevation in Perspective and a zero-degree center reference in Panorama.
+- Persist the Center overlay setting across media and include it in default-settings reset.
+
 ## 0.4.35 - 2026-10-27
 
 ### Added

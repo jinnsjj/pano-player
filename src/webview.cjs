@@ -29,6 +29,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
       <div id="audio-poster" hidden><i data-lucide="audio-lines" aria-hidden="true"></i><span id="audio-format"></span></div>
       <canvas id="direction-grid" width="2048" height="1024" aria-label="Direction grid: front 0 degrees, left positive, right negative azimuth" hidden></canvas>
       <div id="spatial" tabindex="0" role="region" aria-label="Perspective view; drag or use arrow keys to look, plus and minus to zoom, Home to reset" hidden></div>
+      <div id="center-marker" role="group" aria-label="View center" hidden><i data-lucide="plus" aria-hidden="true"></i><output id="center-angles" aria-label="Center azimuth and elevation" aria-live="off"></output></div>
       <div id="empty"><i data-lucide="film" aria-hidden="true"></i><span id="status" role="status">Loading media</span><button id="retry" hidden>Retry</button></div>
     </div>
   </div>
@@ -79,6 +80,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
         </details>
       </div>
       <label class="toggle"><input id="meter" type="checkbox" aria-controls="meter-overlay"><span>Meters</span></label>
+      <label class="toggle"><input id="center" type="checkbox" aria-controls="center-marker"><span>Center</span></label>
       <label class="toggle" title="PanoView in Perspective"><input id="overview" type="checkbox" aria-controls="overview-overlay"><span>PanoView</span></label>
     </div></div>
     <div id="audio-options" class="settings-section" role="group" aria-labelledby="audio-heading">

@@ -87,6 +87,34 @@ function setup(saved = {}) {
   return { get, messages, onMap, onError, tick: now => frame(now), monitor: window.__PANO_PLAYER__.monitor,
     persisted: () => persisted, state: () => window.__PANO_PLAYER__.getState() };
 }
+test('center marker toggles, persists across views and resets without changing playback', () => {
+  const s = setup(), video = s.get('video');
+  assert.equal(s.get('center').checked, false);
+  assert.equal(s.get('center-marker').hidden, true);
+  video.currentTime = 4; video.paused = false;
+  const generation = s.state().generation;
+  s.get('center').checked = true; s.get('center').fire('change');
+  assert.equal(s.get('center-marker').hidden, false);
+  assert.equal(s.persisted().center, true);
+  s.get('view-spatial').fire('click');
+  assert.equal(s.get('center-marker').hidden, false);
+  s.get('view-flat').fire('click');
+  assert.equal(s.get('center-marker').hidden, false);
+  const next = setup(s.persisted());
+  assert.equal(next.get('center').checked, true);
+  assert.equal(next.get('center-marker').hidden, false);
+  s.get('center').checked = false; s.get('center').fire('change');
+  assert.equal(s.get('center-marker').hidden, true);
+  assert.equal(video.currentTime, 4); assert.equal(video.paused, false);
+  assert.equal(s.state().generation, generation);
+  next.get('reset-settings').fire('click');
+  assert.equal(next.get('center-marker').hidden, true);
+  assert.equal(normalize({ center: 'true' }).center, false);
+  const rotated = setup({ center: true, view: 'spatial', yaw: Math.PI / 2, pitch: -Math.PI / 6 });
+  assert.equal(rotated.get('center-angles').textContent, 'Az 90.0° · El -30.0°');
+  rotated.get('view-flat').fire('click');
+  assert.equal(rotated.get('center-angles').textContent, 'Az 0.0° · El 0.0°');
+});
 test('channel mapper presets, bypass and reset remain session-local and adapt to channel changes', () => {
   const s = setup(), video = s.get('video');
   video.channels = 6; video.fire('loadedmetadata');

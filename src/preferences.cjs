@@ -3,7 +3,7 @@ const defaults = Object.freeze({
   projection: 'auto', layout: 'mono', rotation: '0', view: 'flat', perspectiveRatio: '4:3', listening: 'binaural',
   order: 'WYZX', normalization: 'SN3D', enabled: false, opacity: .75,
   mapAlgorithm: 'music', mapSources: 1,
-  volume: 1, muted: false, grid: false, gridOpacity: 1, meter: false, overview: true, yaw: 0, pitch: 0, fov: 85,
+  volume: 1, muted: false, grid: false, gridOpacity: 1, center: false, meter: false, overview: true, yaw: 0, pitch: 0, fov: 85,
 });
 const choices = {
   projection: ['auto', '180', '360', 'eac'], layout: ['mono', 'sbs', 'tb'],
@@ -22,7 +22,7 @@ function normalize(value) {
   for (const [key, [min, max]] of Object.entries(ranges)) {
     if (Number.isFinite(value[key])) result[key] = Math.max(min, Math.min(max, value[key]));
   }
-  for (const key of ['enabled', 'muted', 'grid', 'meter', 'overview']) if (typeof value[key] === 'boolean') result[key] = value[key];
+  for (const key of ['enabled', 'muted', 'grid', 'center', 'meter', 'overview']) if (typeof value[key] === 'boolean') result[key] = value[key];
   return result;
 }
 module.exports = { defaults, normalize };

@@ -57,6 +57,12 @@ import { createRouting } from './channel-routing.js';
     $('direction-grid').hidden = !enabled || viewMode === 'spatial';
     view?.setGridEnabled(enabled);
   }
+  function updateCenter() {
+    $('center-marker').hidden = !preferences.center;
+    const degrees = radians => (Math.round(radians * 180 / Math.PI * 10) / 10 || 0).toFixed(1) + '°';
+    const spatial = viewMode === 'spatial';
+    $('center-angles').textContent = 'Az ' + degrees(spatial ? preferences.yaw : 0) + ' · El ' + degrees(spatial ? preferences.pitch : 0);
+  }
   function persist(patch) {
     preferences = { ...preferences, ...patch };
     api.setState(preferences);
@@ -72,6 +78,8 @@ import { createRouting } from './channel-routing.js';
   function applyPreferences() {
     for (const id of ['projection', 'layout', 'rotation', 'perspectiveRatio', 'listening', 'order', 'normalization', 'opacity', 'gridOpacity', 'volume', 'mapAlgorithm', 'mapSources']) $(id).value = preferences[id];
     $('enabled').checked = preferences.enabled;
+    $('center').checked = preferences.center;
+    updateCenter();
     $('grid').checked = preferences.grid; updateGrid();
     meters.setEnabled(preferences.meter);
     overview.setEnabled(preferences.overview);
@@ -109,6 +117,7 @@ import { createRouting } from './channel-routing.js';
     overview.setAvailable(spatial && !!view);
     view?.setOverviewEnabled(overview.enabled && overview.available);
     view?.configure(spatial, hasVideo, projection, preferences.perspectiveRatio);
+    updateCenter();
   }
   function renderProjection() {
     if (video.displayElement && projector?.render(video.frames)) view?.sourceChanged();
@@ -362,6 +371,9 @@ import { createRouting } from './channel-routing.js';
     persist({ perspectiveRatio: ratio }); layoutProjection();
   });
   $('grid').addEventListener('change', () => { persist({ grid: $('grid').checked }); updateGrid(); });
+  $('center').addEventListener('change', () => {
+    persist({ center: $('center').checked }); updateCenter();
+  });
   $('gridOpacity').addEventListener('input', () => { level('gridOpacity'); persist({ gridOpacity: Number($('gridOpacity').value) }); updateGrid(); });
   async function selectView(mode) {
     viewMode = mode;
@@ -372,7 +384,7 @@ import { createRouting } from './channel-routing.js';
         view = new window.FoaView($('spatial'), video, canvas, monitor, $('direction-grid'), $('overview-content'));
         view.setGridEnabled($('grid').checked);
         view.restore(preferences);
-        view.onChange = camera => persist(camera);
+        view.onChange = camera => { persist(camera); updateCenter(); };
       }
       layoutProjection();
     } catch (error) {

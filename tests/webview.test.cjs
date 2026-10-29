@@ -67,6 +67,9 @@ test('review UI keeps direct view tabs, labeled setting groups and accessible tr
   assert.match(settings, /id="mapSources" aria-label="MUSIC sources"/);
   for (const id of ['volume-value', 'opacity-value', 'gridOpacity-value']) assert.match(html, new RegExp('id="' + id + '" aria-hidden="true"'));
   assert.match(settings, /id="meter" type="checkbox" aria-controls="meter-overlay"/);
+  assert.match(settings, /id="center" type="checkbox" aria-controls="center-marker"/);
+  assert.match(html, /id="center-marker" role="group" aria-label="View center" hidden/);
+  assert.match(html, /id="center-angles" aria-label="Center azimuth and elevation" aria-live="off"/);
   assert.match(settings, /id="overview" type="checkbox" aria-controls="overview-overlay"/);
   assert.match(html, /id="overview-overlay" role="dialog" aria-labelledby="overview-heading" tabindex="-1" hidden/);
   assert.match(html, /aria-label="Close PanoView"/);
