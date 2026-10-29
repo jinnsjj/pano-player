@@ -8,6 +8,7 @@ import { attachViewportResize } from './viewport-resize.js';
 import { AudioSwitcher } from './audio-switch.js';
 import { ChannelMapper } from './channel-mapper.js';
 import { createRouting } from './channel-routing.js';
+import { attachLoopRange } from './loop-range.js';
 (() => {
   'use strict';
   const hostApi = acquireVsCodeApi();
@@ -19,6 +20,9 @@ import { createRouting } from './channel-routing.js';
   const disposeViewportResize = attachViewportResize($('stage'), $('viewport-resize'), $('player-layout'), $('transport'));
   const video = new window.StreamPlayer($('video'), api); const canvas = $('overlay');
   attachEnvelope(video, $('seek-envelope'));
+  const loop = attachLoopRange(video, { seek: $('seek'), track: $('seek-track'), selection: $('loop-selection'),
+    start: $('loop-start'), end: $('loop-end'), toggle: $('loop-toggle'), readout: $('loop-time') },
+  error => { $('detail').textContent = error.message; });
   const ctx = canvas.getContext('2d');
   const defaults = JSON.parse(video.dataset.defaults);
   let preferences = JSON.parse(video.dataset.preferences);
@@ -297,7 +301,6 @@ import { createRouting } from './channel-routing.js';
       void video.play().catch(error => { $('detail').textContent = error.message; });
     }
   });
-  $('seek').addEventListener('input', () => { video.currentTime = Number($('seek').value); });
   for (const id of ['seek', 'volume', 'opacity', 'gridOpacity', 'projection', 'layout', 'rotation', 'perspectiveRatio', 'mapAlgorithm', 'mapSources', 'audio-track', 'listening', 'order', 'normalization']) {
     const control = $(id);
     control.addEventListener('pointerdown', () => { control.dataset.pointerFocus = ''; });
@@ -425,13 +428,14 @@ import { createRouting } from './channel-routing.js';
   });
   function dispose() {
     if (disposed) return;
-    disposed = true; audioSwitcher.cancel(); disposeViewportResize(); projectionRequest++;
+    disposed = true; audioSwitcher.cancel(); loop.dispose(); disposeViewportResize(); projectionRequest++;
     projector?.dispose(); view?.dispose(); monitor.dispose(); video.dispose();
   }
   window.addEventListener('pagehide', dispose);
   window.__PANO_PLAYER__ = { get monitor() { return monitor; }, dispose, get view() { return view; }, getState: () => ({
     ...stats, ready, generation: monitor.generation, currentTime: video.currentTime, paused: video.paused, mappedAt,
     audioTracks: video.audioTracks, audioTrackIndex: video.audioTrackIndex, audioSource, switchingTrack,
+    loop: loop.getState(),
     projection: hasVideo ? effectiveProjection() : 'audio', projectionMode: $('projection').value, preferences: { ...preferences }, layout: $('layout').value, listening: monitor.getState(), view: view?.getState(),
     videoQuality: (() => { const q = video.getVideoPlaybackQuality?.(); return q && { total: q.totalVideoFrames, dropped: q.droppedVideoFrames }; })(),
   }) };

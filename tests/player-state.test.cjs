@@ -19,7 +19,7 @@ function setup(saved = {}) {
       fire(type, event = {}) { for (const fn of this.listeners[type] || []) fn(event); },
       width: 2048, height: 1024, clientHeight: 800,
       getContext: () => ({ clearRect() {}, putImageData() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, strokeText() {}, fillText() {} }),
-      attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute() {}, load() {}, render() {},
+      attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, getAttribute(name) { return this.attributes[name]; }, removeAttribute() {}, load() {}, render() {},
       parentElement: { clientWidth: 1280 },
       querySelectorAll() { return []; }, focus() {},
       showPopover() { this.popoverOpen = true; this.fire('toggle'); }, hidePopover() { this.popoverOpen = false; this.fire('toggle'); },
@@ -27,6 +27,7 @@ function setup(saved = {}) {
       contains(target) { return target === this; },
       getBoundingClientRect() { return { x: 100, y: 76, top: 76, bottom: 224, right: 340, width: 240, height: 148 }; },
       pause() { this.paused = true; }, play() { this.paused = false; return Promise.resolve(); },
+      async seek(time) { this.currentTime = time; this.fire('seeking'); },
       useAudioSession(session) { this.audioTrackIndex = session.audioTrackIndex; this.channels = session.channels; this.fire('loadedmetadata'); },
     });
     return elements.get(id);
@@ -87,6 +88,25 @@ function setup(saved = {}) {
   return { get, messages, onMap, onError, tick: now => frame(now), monitor: window.__PANO_PLAYER__.monitor,
     persisted: () => persisted, state: () => window.__PANO_PLAYER__.getState() };
 }
+test('range loop shares transport seek/reset events without persisting transient selection', async () => {
+  const s = setup(), video = s.get('video');
+  video.currentTime = 2; s.get('loop-toggle').fire('click');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(s.state().loop.range.start, 0); assert.equal(s.state().loop.range.end, 10);
+  assert.equal(video.currentTime, 2);
+  assert.equal(s.state().loop.enabled, true); assert.equal(s.state().paused, true);
+  const generation = s.state().generation;
+  video.paused = false; video.currentTime = 10; video.fire('timeupdate');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(video.currentTime, 0); assert.equal(video.paused, false);
+  assert.ok(s.state().generation > generation);
+  s.get('seek').value = '9'; s.get('seek').fire('input');
+  assert.equal(video.currentTime, 9); assert.equal(s.state().loop.enabled, true);
+  s.get('volume').value = '.5'; s.get('volume').fire('input');
+  assert.equal(s.persisted().loop, undefined);
+  s.get('loop-toggle').fire('click'); assert.equal(s.state().loop.range, null); assert.equal(s.state().loop.enabled, false);
+  assert.equal(video.currentTime, 9); assert.equal(video.paused, false);
+});
 test('center marker toggles, persists across views and resets without changing playback', () => {
   const s = setup(), video = s.get('video');
   assert.equal(s.get('center').checked, false);

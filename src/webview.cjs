@@ -37,7 +37,17 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
   <div id="transport" role="group" aria-label="Playback controls">
     <button id="play" title="Play" aria-label="Play" disabled><i data-lucide="play" aria-hidden="true"></i></button>
     <output id="time" aria-live="off">0:00 / 0:00</output>
-    <div id="seek-track"><canvas id="seek-envelope" aria-hidden="true"></canvas><input id="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="Playback position" disabled></div>
+    <div id="timeline">
+      <div id="seek-track">
+        <canvas id="seek-envelope" aria-hidden="true"></canvas>
+        <div id="loop-selection" aria-hidden="true" hidden></div>
+        <input id="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="Playback position" title="Click to seek; drag to select a loop; drag the playhead to scrub; Shift-drag to select from the playhead" disabled>
+        <div id="loop-start" class="loop-handle" role="slider" tabindex="0" aria-label="Loop start" aria-orientation="horizontal" hidden></div>
+        <div id="loop-end" class="loop-handle" role="slider" tabindex="0" aria-label="Loop end" aria-orientation="horizontal" hidden></div>
+      </div>
+      <output id="loop-time" aria-label="Loop range" aria-live="off"></output>
+    </div>
+    <button id="loop-toggle" title="Loop entire media" aria-label="Loop entire media" aria-pressed="false" disabled><i data-lucide="repeat-2" aria-hidden="true"></i></button>
     <div class="volume-controls"><button id="mute" title="Mute" aria-label="Mute" disabled><i data-lucide="volume-2" aria-hidden="true"></i></button><input id="volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume"><output id="volume-value" aria-hidden="true">100%</output></div>
     <div id="view-options">
         <div role="tablist" aria-label="View mode">

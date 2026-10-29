@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.37 - 2026-10-29
+
+### Added
+
+- Timeline range looping with mouse and touch selection, adjustable boundaries, and keyboard boundary controls.
+- One repeat button to create a full-media loop when no range is selected, or clear an existing loop range.
+- Keep looping enabled when seeking outside the selection: play into the range from before it, or continue to the media end and return to the loop start from after it.
+
 ## 0.4.36 - 2026-10-29
 
 ### Added

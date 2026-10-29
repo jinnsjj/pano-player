@@ -8,7 +8,7 @@ const built = fs.existsSync(path.join(root, 'index.html'));
 
 test('web build ships a self-contained static player and decoder assets', { skip: !built }, () => {
   for (const file of ['index.html', 'player.html', 'app.js', 'bootstrap.js', '_headers', '404.html', 'LICENSE.txt',
-    'media/player.js', 'media/view.js', 'media/stream-worker.js', 'media/pcm-processor.js', 'media/monitor.js',
+    'media/player.js', 'media/loop-range.js', 'media/view.js', 'media/stream-worker.js', 'media/pcm-processor.js', 'media/monitor.js',
     'media/libav-6.10.7.1.5-decoder-aac.wasm.wasm', 'media/LICENSE-ffmpeg.txt']) {
     assert.ok(fs.statSync(path.join(root, file)).size > 0, file);
   }

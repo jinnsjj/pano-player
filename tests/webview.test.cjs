@@ -109,6 +109,18 @@ test('all webview icons are included in the selective Lucide registry', () => {
     assert.ok(registered.has(exportName), name + ' must be bundled');
   }
 });
+test('timeline exposes an accessible range loop without replacing the native seek slider', () => {
+  const html = renderHtml({ title: 'loop.wav' });
+  assert.match(html, /id="seek" type="range"[^>]*aria-label="Playback position"/);
+  assert.match(html, /id="loop-selection" aria-hidden="true" hidden/);
+  for (const [id, label] of [['start', 'Loop start'], ['end', 'Loop end']]) {
+    assert.match(html, new RegExp(`id="loop-${id}"[^>]*role="slider" tabindex="0" aria-label="${label}"`));
+  }
+  assert.match(html, /id="loop-toggle"[^>]*aria-pressed="false" disabled/);
+  assert.match(html, /id="loop-toggle"[^>]*aria-label="Loop entire media"/);
+  assert.doesNotMatch(html, /id="loop-clear"/);
+  assert.match(html, /id="loop-time" aria-label="Loop range" aria-live="off"/);
+});
 test('header leaves filenames to the editor tab and metadata belongs to the footer', () => {
   const html = renderHtml({ title: 'review.webm', logo: 'https://local/icon.png' });
   const header = html.match(/<header>[\s\S]*?<\/header>/)[0];

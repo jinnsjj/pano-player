@@ -30,6 +30,7 @@ A standalone static web player shares the extension's playback, projection, FOA 
 - **PanoView**: a movable panorama overview with the current field of view, toggled from the Overlay row.
 - **Overlay grid**: optional 30-degree azimuth/elevation lines with front, left, right and back labels, in both views. Grid and PowerMap have independent toggles, with opacity in collapsible settings menus; Grid is available even without audio.
 - **Playback controls**: switch view tabs, reset the camera, seek, adjust volume, and mute without reopening the file.
+- **Range loop**: click the repeat button to loop the entire media, or drag across the timeline to loop a selected interval. Click repeat again to clear the loop range. Click the timeline to seek or drag the playhead to scrub; Shift-drag also selects from the playhead. Drag either amber boundary to resize the loop, or focus it and use arrow keys (0.1 s; Shift for 1 s). Seeking outside keeps looping enabled: playback before the range enters it naturally; playback after it continues to the media end, then returns to the loop start. Selection preserves play/pause state and is local to the current player; loop boundaries use ordinary streaming seeks, not sample-accurate gapless playback.
 
 ![PanoPlayer Perspective view showing the Front reference face, direction grid and panorama viewfinder thumbnail](docs/images/spatial.jpg)
 
