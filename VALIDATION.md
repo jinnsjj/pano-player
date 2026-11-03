@@ -24,10 +24,19 @@ Packaging checks cover the publisher/version, current editor ID, HTTPS screensho
 links, absence of obsolete runtime identifiers and exclusion of nested VSIX archives.
 FFmpeg/libav objects must be fetched through Git LFS before packaging.
 
+Validate the actual archive with `PANO_PLAYER_VSIX=/path/to/player.vsix npm test`.
+The archive check requires `unzip` and verifies the exact public file list,
+corresponding source attachments, hydrated assets, byte equality and WASM validity.
+
 ## Acceptance Boundary
 
-Version 0.4.38: 182 automated checks passed, one optional codec fixture test
-skipped. Local Chrome covered default bundled-plugin loading, independent
+Version 0.4.38: 184 automated checks passed, one optional codec fixture test
+skipped, with the actual repacked VSIX supplied. All eight corresponding-source
+attachments are included, and runtime assets are byte-identical to the initial
+0.4.38 package. An isolated rebuild from the packaged meter sources reproduced
+the bundled worklet byte for byte.
+
+Local Chrome covered default bundled-plugin loading, independent
 Overlay visibility/disclosure controls, annotation import, geometry-only and
 missing-position records, optional captions/source filters, format help and
 plugin enablement persistence at 1440/390/320 px. Geometry-only Labels toggles

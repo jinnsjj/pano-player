@@ -10,6 +10,14 @@
 !src/preferences.cjs
 !src/editor-media.cjs
 !src/plugin-registry.cjs
+!src/loudness-meter.js
+!src/level-meter-processor.js
+!meter-sources/loudness_meter
+!codec-sources/README.md
+!codec-sources/ffmpeg-7.1.5.tar.xz
+!codec-sources/libav.js.tar.gz
+!codec-sources/emfiberthreads-1.3.tar.gz
+!codec-sources/mediabunny-1.56.2.tar.gz
 !plugins/catalog.cjs
 !docs/REFERENCE.md
 !docs/PLUGINS.md
