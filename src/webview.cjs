@@ -11,10 +11,10 @@ function meterGroup(title, unit, kind, columns) {
   return `<section class="meter-group ${kind}" aria-label="${title}"><h3 title="${title} (${unit})">${title}<span>${unit}</span></h3><div class="meter-columns">
     <div class="meter-axis" aria-hidden="true">${[0, -12, -24, -48, -72].map(db => `<span data-db="${db}">${db}</span>`).join('')}</div>${columns}</div></section>`;
 }
-function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, monitor, view, nonce, source, worker, worklet, decoder, pcm, stream, hostMedia = false, preferences, bootstrap, extraStyle }) {
+function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, monitor, view, nonce, source, worker, worklet, decoder, pcm, stream, hostMedia = false, preferences, bootstrap, extraStyle, plugins = [] }) {
   return `<!doctype html><html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; img-src ${cspSource} data:; media-src ${cspSource}; connect-src ${cspSource}; worker-src blob:; style-src ${cspSource}; script-src ${cspSource} blob: 'wasm-unsafe-eval'${nonce ? ` 'nonce-${nonce}'` : ''};">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; img-src ${cspSource} data:; media-src ${cspSource}; connect-src ${cspSource}; worker-src blob:; style-src ${cspSource} blob:; script-src ${cspSource} blob: 'wasm-unsafe-eval'${nonce ? ` 'nonce-${nonce}'` : ''};">
 <link rel="stylesheet" href="${escape(style)}">${extraStyle ? `<link rel="stylesheet" href="${escape(extraStyle)}">` : ''}<title>${escape(title)} - PanoPlayer</title></head>
 <body id="player">
 <header>
@@ -23,7 +23,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
 <main id="player-layout">
   <div class="viewport">
     <div id="stage">
-      <canvas id="video" data-title="${escape(title)}" data-defaults="${escape(JSON.stringify(defaults))}" data-preferences="${escape(JSON.stringify(normalize(preferences)))}" data-host="${hostMedia ? '1' : '0'}" data-source="${escape(source || '')}" data-decoder="${escape(decoder || '')}" data-pcm="${escape(pcm || '')}" data-worker="${escape(worker || '')}" data-worklet="${escape(worklet || '')}" data-view="${escape(view || '')}" aria-label="Panorama video"></canvas>
+      <canvas id="video" data-title="${escape(title)}" data-defaults="${escape(JSON.stringify(defaults))}" data-preferences="${escape(JSON.stringify(normalize(preferences)))}" data-plugins="${escape(JSON.stringify(plugins))}" data-host="${hostMedia ? '1' : '0'}" data-source="${escape(source || '')}" data-decoder="${escape(decoder || '')}" data-pcm="${escape(pcm || '')}" data-worker="${escape(worker || '')}" data-worklet="${escape(worklet || '')}" data-view="${escape(view || '')}" aria-label="Panorama video"></canvas>
       <canvas id="projected" aria-label="Single-eye panorama" hidden></canvas>
       <canvas id="overlay" width="140" height="70" aria-label="FOA direction heatmap"></canvas>
       <div id="audio-poster" hidden><i data-lucide="audio-lines" aria-hidden="true"></i><span id="audio-format"></span></div>
@@ -71,28 +71,28 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
       <h2 id="overlay-heading"><i data-lucide="layers" aria-hidden="true"></i>Overlay</h2><div class="settings-row">
       <div class="overlay-control" role="group" aria-label="Grid overlay">
         <label class="toggle"><input id="grid" type="checkbox"><span>Grid</span></label>
-        <details id="grid-settings" class="overlay-settings">
-          <summary title="Grid settings" aria-label="Grid settings" aria-controls="grid-menu"><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
-          <div id="grid-menu" class="overlay-menu">
-            <label class="overlay-opacity">Opacity<output id="gridOpacity-value" aria-hidden="true">100%</output><input id="gridOpacity" type="range" min="0" max="1" step="0.01" value="1" aria-label="Grid opacity"></label>
-          </div>
-        </details>
+        <button id="grid-settings" class="overlay-module-toggle overlay-arrow" title="Grid settings" aria-label="Grid settings" aria-controls="grid-menu" aria-expanded="false"><i data-lucide="chevron-down" aria-hidden="true"></i></button>
       </div>
       <div class="overlay-control" role="group" aria-label="PowerMap overlay">
         <label class="toggle"><input id="enabled" type="checkbox"><span>PowerMap</span></label>
-        <details id="powermap-settings" class="overlay-settings">
-          <summary title="PowerMap settings" aria-label="PowerMap settings" aria-controls="powermap-menu"><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
-          <div id="powermap-menu" class="overlay-menu">
-            <label>Algorithm<select id="mapAlgorithm" aria-label="PowerMap algorithm"><option value="music">MUSIC</option><option value="pwd">PWD</option></select></label>
-            <label>Sources<select id="mapSources" aria-label="MUSIC sources"><option value="1">1</option><option value="2">2</option></select></label>
-            <label class="overlay-opacity">Opacity<output id="opacity-value" aria-hidden="true">75%</output><input id="opacity" type="range" min="0" max="1" step="0.01" value="0.75" aria-label="PowerMap opacity"></label>
-          </div>
-        </details>
+        <button id="powermap-settings" class="overlay-module-toggle overlay-arrow" title="PowerMap settings" aria-label="PowerMap settings" aria-controls="powermap-menu" aria-expanded="false"><i data-lucide="chevron-down" aria-hidden="true"></i></button>
       </div>
+      <span class="overlay-module-host" data-overlay-modules></span>
       <label class="toggle"><input id="meter" type="checkbox" aria-controls="meter-overlay"><span>Meters</span></label>
       <label class="toggle"><input id="center" type="checkbox" aria-controls="center-marker"><span>Center</span></label>
       <label class="toggle" title="PanoView in Perspective"><input id="overview" type="checkbox" aria-controls="overview-overlay"><span>PanoView</span></label>
-    </div></div>
+    </div>
+      <div id="grid-menu" class="overlay-module-body overlay-menu" role="group" aria-labelledby="grid-settings" hidden>
+        <label class="overlay-opacity">Opacity<output id="gridOpacity-value" aria-hidden="true">100%</output><input id="gridOpacity" type="range" min="0" max="1" step="0.01" value="1" aria-label="Grid opacity"></label>
+      </div>
+      <div id="powermap-menu" class="overlay-module-body overlay-menu" role="group" aria-labelledby="powermap-settings" hidden>
+        <label>Algorithm<select id="mapAlgorithm" aria-label="PowerMap algorithm"><option value="music">MUSIC</option><option value="pwd">PWD</option></select></label>
+        <label>Sources<select id="mapSources" aria-label="MUSIC sources"><option value="1">1</option><option value="2">2</option></select></label>
+        <label class="overlay-opacity">Opacity<output id="opacity-value" aria-hidden="true">75%</output><input id="opacity" type="range" min="0" max="1" step="0.01" value="0.75" aria-label="PowerMap opacity"></label>
+      </div>
+    </div>
+    <div id="plugin-panels"></div>
+    <output id="plugin-status" role="status" hidden></output>
     <div id="audio-options" class="settings-section" role="group" aria-labelledby="audio-heading">
       <h2 id="audio-heading"><i data-lucide="audio-lines" aria-hidden="true"></i>Audio</h2><div class="settings-row">
       <label id="audio-track-control">Track <select id="audio-track" aria-label="Audio source and track" disabled></select></label>

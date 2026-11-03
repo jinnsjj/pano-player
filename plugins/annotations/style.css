@@ -1,0 +1,24 @@
+.plugin-panel-content:has(#annotation-open) { min-width: 0; }
+#annotation-open, #annotation-clear { width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 4px; }
+#annotation-name { min-width: 0; max-width: min(280px, 100% - 80px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+#annotation-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#annotation-sources { display: flex; flex-wrap: wrap; gap: 2px 16px; }
+#annotation-sources:empty { display: none; }
+#annotation-sources .annotation-source { overflow-wrap: anywhere; }
+.annotation-source > span:last-child { min-width: 0; }
+.annotation-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+#annotation-status { display: block; color: var(--map-accent); font-size: 12px; overflow-wrap: anywhere; }
+#annotation-format { margin-top: 4px; max-width: 820px; }
+#annotation-format summary { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; cursor: pointer; list-style: none; color: var(--muted); }
+#annotation-format summary::-webkit-details-marker { display: none; }
+#annotation-format summary:hover, #annotation-format[open] summary { color: var(--text); }
+#annotation-format summary svg { width: 14px; height: 14px; }
+.annotation-format-content { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 16px; padding-block: 8px; border-top: 1px solid var(--line); font-size: 12px; line-height: 1.5; }
+.annotation-format-content pre { min-width: 0; max-height: 360px; margin: 0; padding: 8px; overflow: auto; white-space: pre; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.annotation-format-content code { font-family: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; }
+.annotation-format-content pre:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.annotation-format-content dl { min-width: 0; margin: 0; }
+.annotation-format-content dt { font-weight: 600; }
+.annotation-format-content dt:not(:first-child) { margin-top: 8px; }
+.annotation-format-content dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+@media (max-width: 720px) { .annotation-format-content { grid-template-columns: minmax(0, 1fr); } }

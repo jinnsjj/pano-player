@@ -1,5 +1,5 @@
 export function attachViewportResize(stage, handle, layout, transport) {
-  let pointer, lastMax;
+  let pointer, lastMax, syncFrame;
   const events = new AbortController();
   const on = (type, listener) => handle.addEventListener(type, listener, { signal: events.signal });
   const limits = () => {
@@ -51,8 +51,16 @@ export function attachViewportResize(stage, handle, layout, transport) {
     event.preventDefault(); event.stopPropagation(); resize(next);
   });
   on('dblclick', () => { stage.style.removeProperty('--stage-height'); });
-  const observer = new ResizeObserver(sync);
+  // Writing a size inside ResizeObserver can resize an already-delivered ancestor.
+  const scheduleSync = () => {
+    if (syncFrame !== undefined) return;
+    syncFrame = requestAnimationFrame(() => { syncFrame = undefined; sync(); });
+  };
+  const observer = new ResizeObserver(scheduleSync);
   for (const element of [stage, stage.parentElement, layout, transport, handle]) observer.observe(element);
-  window.addEventListener('resize', sync, { signal: events.signal }); sync();
-  return () => { events.abort(); observer.disconnect(); };
+  window.addEventListener('resize', scheduleSync, { signal: events.signal }); sync();
+  return () => {
+    events.abort(); observer.disconnect();
+    if (syncFrame !== undefined) cancelAnimationFrame(syncFrame);
+  };
 }

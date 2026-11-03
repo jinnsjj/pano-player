@@ -4,12 +4,16 @@ const path = require('node:path');
 const { build } = require('esbuild');
 const { buildMedia } = require('../build.cjs');
 const { renderHtml } = require('../src/webview.cjs');
+const { media, bundledMedia } = require('../public-assets.cjs');
 
 const root = path.resolve(__dirname, '..');
 const outdir = path.join(root, 'output/web');
 async function buildWeb() {
-  await fs.mkdir(outdir, { recursive: true });
-  await fs.cp(path.join(root, 'media'), path.join(outdir, 'media'), { recursive: true });
+  await fs.rm(outdir, { recursive: true, force: true });
+  await fs.mkdir(path.join(outdir, 'media'), { recursive: true });
+  for (const file of media) {
+    if (!bundledMedia.includes(file)) await fs.copyFile(path.join(root, 'media', file), path.join(outdir, 'media', file));
+  }
   await buildMedia(path.join(outdir, 'media'));
   for (const name of ['index.html', 'app.css', 'player.css', '_headers', '404.html']) {
     await fs.copyFile(path.join(__dirname, name), path.join(outdir, name));

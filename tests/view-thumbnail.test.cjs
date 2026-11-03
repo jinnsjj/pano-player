@@ -128,3 +128,21 @@ test('Panorama to Perspective round trip preserves the turned footprint', async 
   assert.ok(view.footprint.getContext('2d').image.data.every((value, index) => value === expected[index]));
   view.dispose();
 });
+
+test('optional layers update the paused overview and release GPU resources independently', async () => {
+  const { view, video } = await setup(); video.readyState = 3; view.configure(true, true, '180');
+  const canvas = { width: 2048, height: 1024 };
+  view.setOverlayLayer('test.first', canvas, false); assert.equal(view.overlayLayers.size, 0);
+  view.setOverlayLayer('test.first', canvas, true);
+  const layer = view.overlayLayers.get('test.first');
+  assert.equal(layer.mesh.visible, true); assert.equal(layer.mesh.renderOrder, 2);
+  assert.ok(view.thumbContext.draws.includes(canvas));
+  assert.equal(layer.texture.image, canvas);
+  view.orient(.3, .2); assert.ok(view.thumbContext.draws.includes(canvas));
+  view.setOverlayLayer('test.first', canvas, false); assert.ok(!view.thumbContext.draws.includes(canvas));
+  let disposed = 0;
+  layer.texture.addEventListener('dispose', () => { disposed++; });
+  layer.material.addEventListener('dispose', () => { disposed++; });
+  view.removeOverlayLayer('test.first'); assert.equal(disposed, 2); assert.equal(view.overlayLayers.size, 0);
+  view.dispose(); assert.equal(disposed, 2);
+});

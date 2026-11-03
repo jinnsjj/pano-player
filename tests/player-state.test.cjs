@@ -64,6 +64,7 @@ function setup(saved = {}) {
   };
   window.FoaView = class {
     setGridEnabled(enabled) { this.grid = enabled; }
+    setOverlayLayer() {} removeOverlayLayer() {}
     setOverviewEnabled(enabled) { this.overview = enabled; }
     configure(active, hasVideo, projection, ratio = '4:3') {
       this.active = active;

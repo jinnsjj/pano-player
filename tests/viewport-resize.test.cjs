@@ -6,7 +6,7 @@ const bundle = buildSync({ entryPoints: [require.resolve('../media/viewport-resi
   format: 'cjs', write: false }).outputFiles[0].text;
 function setup() {
   const handlers = {}, attributes = {}, values = {};
-  let captured, sync, disconnected = false, aspect = 16 / 9;
+  let captured, sync, pending, disconnected = false, aspect = 16 / 9;
   const layout = { clientHeight: 1100 }, transport = { getBoundingClientRect: () => ({ height: 65 }) };
   const stage = { parentElement: { clientWidth: 1008 },
     style: { setProperty: (key, value) => { values[key] = value; }, removeProperty: key => { delete values[key]; } },
@@ -18,6 +18,7 @@ function setup() {
     releasePointerCapture: () => { captured = undefined; } };
   const context = { module: { exports: {} }, exports: {}, AbortController,
     window: { innerHeight: 900, addEventListener() {} },
+    requestAnimationFrame(fn) { pending = fn; return 1; }, cancelAnimationFrame() { pending = undefined; },
     getComputedStyle: () => ({ paddingLeft: '24', paddingRight: '24', paddingTop: '16', paddingBottom: '16',
       borderTopWidth: '1', borderBottomWidth: '1', getPropertyValue: () => String(aspect) }),
     ResizeObserver: class { constructor(fn) { sync = fn; } observe() {} disconnect() { disconnected = true; } } };
@@ -25,7 +26,9 @@ function setup() {
   const dispose = context.module.exports.attachViewportResize(stage, handle, layout, transport);
   const fire = (name, overrides = {}) => handlers[name]({ button: 0, isPrimary: true, pointerId: 1, clientY: 500,
     preventDefault() {}, stopPropagation() {}, ...overrides });
-  return { stage, layout, transport, attributes, values, fire, sync, dispose, captured: () => captured,
+  const flush = () => { const fn = pending; pending = undefined; fn?.(); };
+  return { stage, layout, transport, attributes, values, fire, sync() { sync(); flush(); }, notify: () => sync(), flush,
+    pending: () => Boolean(pending), dispose, captured: () => captured,
     disconnected: () => disconnected, setAspect: value => { aspect = value; } };
 }
 test('drag resizes from actual height, clamps to available width, and releases capture', () => {
@@ -73,4 +76,16 @@ test('keyboard, reset, ratio changes and pointer cancellation remain usable', ()
   s.fire('pointerdown'); s.fire('lostpointercapture'); s.fire('pointermove', { clientY: 600 });
   assert.equal(s.values['--stage-height'], undefined);
   s.dispose();
+});
+test('observed size changes defer height writes until the next frame and disposal cancels queued work', () => {
+  const s = setup();
+  const previous = s.values['--stage-max-height'];
+  s.layout.clientHeight = 360;
+  s.notify(); s.notify();
+  assert.equal(s.pending(), true);
+  assert.equal(s.values['--stage-max-height'], previous, 'No layout mutation inside ResizeObserver delivery');
+  s.flush(); assert.equal(s.values['--stage-max-height'], '117px');
+  assert.equal(s.pending(), false);
+  s.layout.clientHeight = 1100; s.notify(); s.dispose(); s.flush();
+  assert.equal(s.values['--stage-max-height'], '117px');
 });

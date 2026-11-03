@@ -1,11 +1,20 @@
-import { createIcons, FolderOpen, X, Maximize, Minimize, ExternalLink, CircleHelp } from 'lucide';
+import { createIcons, FolderOpen, X, Maximize, Minimize, ExternalLink, CircleHelp, Puzzle, Trash2 } from 'lucide';
 import { createPreferences, validateFile, capabilityError } from './host.js';
+import { PluginStore, attachPluginManager } from './plugins.js';
+import bundledPlugins from '../plugins/catalog.cjs';
 
 const $ = id => document.getElementById(id);
 const preferences = createPreferences(() => localStorage);
+let pluginDatabase;
+try { pluginDatabase = window.indexedDB; } catch {}
+const plugins = new PluginStore(pluginDatabase, bundledPlugins.map(({ id, name, version, apiVersion, script, style }) => ({
+  id, name, version, apiVersion, script: new URL(script, document.baseURI).href,
+  ...(style ? { style: new URL(style, document.baseURI).href } : {}),
+})));
 let file = null;
 let frame = null;
-const icons = () => createIcons({ icons: { FolderOpen, X, Maximize, Minimize, ExternalLink, CircleHelp } });
+const icons = () => createIcons({ icons: { FolderOpen, X, Maximize, Minimize, ExternalLink, CircleHelp, Puzzle, Trash2 } });
+attachPluginManager(plugins, icons);
 for (const id of ['help', 'empty-help']) $(id).addEventListener('click', () => $('help-dialog').showModal());
 $('help-close').addEventListener('click', () => $('help-dialog').close());
 $('help-dialog').addEventListener('click', event => {
@@ -46,6 +55,8 @@ function openFile(candidate) {
 window.panoWebHost = Object.freeze({
   getFile: () => file,
   preferences,
+  getPlugins: () => plugins.getEnabled(),
+  onPluginsChanged: callback => plugins.subscribe(callback),
   report: announce,
   openFiles(files) {
     if (files.length !== 1) { announce('Select one media file at a time.'); return; }

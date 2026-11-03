@@ -22,6 +22,8 @@ import { validateFile } from './host.js';
   document.title = `${file.name} - PanoPlayer`;
   window.acquireVsCodeApi = () => ({
     file,
+    getPlugins: () => host.getPlugins(),
+    onPluginsChanged: callback => host.onPluginsChanged(callback),
     setState() {},
     postMessage(message) {
       if (message.type === 'preferences') host.preferences.save(message.patch);

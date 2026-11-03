@@ -9,6 +9,8 @@ import { AudioSwitcher } from './audio-switch.js';
 import { ChannelMapper } from './channel-mapper.js';
 import { createRouting } from './channel-routing.js';
 import { attachLoopRange } from './loop-range.js';
+import { PlayerPlugins } from './plugins.js';
+import { attachOverlayDisclosure } from './overlay-controls.js';
 (() => {
   'use strict';
   const hostApi = acquireVsCodeApi();
@@ -48,6 +50,18 @@ import { attachLoopRange } from './loop-range.js';
     },
   });
   let hasVideo = true; let sourceAspect = 2; let mediaDetail = 'Native media';
+  const plugins = new PlayerPlugins({ getState: pluginState, getView: () => view, stage: $('stage'), panels: $('plugin-panels'), overlays: $('overlay-options'),
+    projectionUrl: video.dataset.view, icons, onError(message) { $('plugin-status').textContent = message; $('plugin-status').hidden = false; } });
+  function pluginState() {
+    const projection = effectiveProjection(), spatial = viewMode === 'spatial';
+    const fov = view?.camera.fov ?? preferences.fov, aspect = view?.camera.aspect ?? perspectiveAspects[preferences.perspectiveRatio];
+    const horizontalFov = 2 * Math.atan(Math.tan(fov * Math.PI / 360) * aspect) * 180 / Math.PI;
+    const width = $('stage').clientWidth;
+    return { time: video.currentTime, duration: video.duration, paused: video.paused, hasVideo,
+      width: video.videoWidth, height: video.videoHeight, projection, layout: $('layout').value, rotation: Number($('rotation').value),
+      viewMode, yaw: view?.yaw ?? 0, pitch: view?.pitch ?? 0, fov, aspect, viewportWidth: width,
+      sourceDisplayWidth: spatial ? width * (projection === '180' ? 180 : 360) / horizontalFov : width * (projection === '180' ? .5 : 1) };
+  }
   $('projection').disabled = $('layout').disabled = $('rotation').disabled = true;
   function level(id) { $(id + '-value').textContent = Math.round(Number($(id).value) * 100) + '%'; }
   function icons() { lucide.createIcons(); }
@@ -121,6 +135,7 @@ import { attachLoopRange } from './loop-range.js';
     overview.setAvailable(spatial && !!view);
     view?.setOverviewEnabled(overview.enabled && overview.available);
     view?.configure(spatial, hasVideo, projection, preferences.perspectiveRatio);
+    plugins.frame();
     updateCenter();
   }
   function renderProjection() {
@@ -202,6 +217,7 @@ import { attachLoopRange } from './loop-range.js';
     if (disposed) return;
     video.render();
     renderProjection();
+    plugins.frame();
     meters.render(now);
     if (!video.paused) { updateClock(); view?.render(); }
     requestAnimationFrame(tick);
@@ -351,19 +367,7 @@ import { attachLoopRange } from './loop-range.js';
     monitor.setPowermap(mapAlgorithm, mapSources); lastMap = null; clear();
     persist({ mapAlgorithm, mapSources }); updateMapControls(); updateDetail();
   });
-  const menus = [$('grid-settings'), $('powermap-settings')];
-  for (const menu of menus) menu.addEventListener('toggle', () => {
-    if (menu.open) for (const other of menus) if (other !== menu) other.open = false;
-  });
-  window.addEventListener('click', event => {
-    for (const menu of menus) if (!menu.contains(event.target)) menu.open = false;
-  });
-  window.addEventListener('keydown', event => {
-    if (event.key !== 'Escape') return;
-    for (const menu of menus) if (menu.open) {
-      menu.open = false; menu.querySelector('summary').focus(); event.preventDefault();
-    }
-  });
+  const disposeOverlayControls = ['grid', 'powermap'].map(id => attachOverlayDisclosure($(id + '-settings'), $(id + '-menu')));
   $('opacity').addEventListener('input', () => { level('opacity'); persist({ opacity: Number($('opacity').value) }); draw(); });
   $('projection').addEventListener('change', () => { persist({ projection: $('projection').value }); void selectProjection(); });
   $('layout').addEventListener('change', () => { persist({ layout: $('layout').value }); void selectProjection(); });
@@ -429,6 +433,8 @@ import { attachLoopRange } from './loop-range.js';
   function dispose() {
     if (disposed) return;
     disposed = true; audioSwitcher.cancel(); loop.dispose(); disposeViewportResize(); projectionRequest++;
+    disposePluginSubscription?.(); plugins.dispose();
+    for (const dispose of disposeOverlayControls) dispose();
     projector?.dispose(); view?.dispose(); monitor.dispose(); video.dispose();
   }
   window.addEventListener('pagehide', dispose);
@@ -436,10 +442,15 @@ import { attachLoopRange } from './loop-range.js';
     ...stats, ready, generation: monitor.generation, currentTime: video.currentTime, paused: video.paused, mappedAt,
     audioTracks: video.audioTracks, audioTrackIndex: video.audioTrackIndex, audioSource, switchingTrack,
     loop: loop.getState(),
+    plugins: plugins.snapshot(),
     projection: hasVideo ? effectiveProjection() : 'audio', projectionMode: $('projection').value, preferences: { ...preferences }, layout: $('layout').value, listening: monitor.getState(), view: view?.getState(),
     videoQuality: (() => { const q = video.getVideoPlaybackQuality?.(); return q && { total: q.totalVideoFrames, dropped: q.droppedVideoFrames }; })(),
   }) };
   applyPreferences(); mapper.sync(); icons(); layoutProjection(); requestAnimationFrame(tick);
+  plugins.sync(hostApi.getPlugins?.() || JSON.parse(video.dataset.plugins || '[]'));
+  const disposePluginSubscription = hostApi.onPluginsChanged?.(() => {
+    $('plugin-status').hidden = true; plugins.sync(hostApi.getPlugins());
+  });
   if (video.readyState >= 2) firstFrame();
   if (video.readyState >= 3) canPlay();
   if (video.error) mediaError();

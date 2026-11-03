@@ -58,10 +58,12 @@ test('review UI keeps direct view tabs, labeled setting groups and accessible tr
   assert.equal((settings.match(/class="overlay-control"/g) || []).length, 2);
   assert.equal((settings.match(/class="overlay-opacity"/g) || []).length, 2);
   for (const [id, label, input] of [['grid', 'Grid', 'gridOpacity'], ['powermap', 'PowerMap', 'opacity']]) {
-    const menu = settings.match(new RegExp(`<details id="${id}-settings"[\\s\\S]*?</details>`))[0];
-    assert.doesNotMatch(menu, /<details[^>]*\bopen\b/);
-    assert.ok(menu.includes(`aria-label="${label} settings"`));
-    assert.ok(menu.includes(`id="${input}"`));
+    const button = settings.match(new RegExp(`<button id="${id}-settings"[^>]*>`))[0];
+    assert.ok(button.includes(`aria-label="${label} settings"`));
+    assert.ok(button.includes('aria-expanded="false"'));
+    assert.ok(button.includes(`aria-controls="${id}-menu"`));
+    assert.match(settings, new RegExp(`<div id="${id}-menu"[^>]*class="overlay-module-body overlay-menu"[^>]*hidden>`));
+    assert.ok(settings.includes(`id="${input}"`));
   }
   assert.match(settings, /id="mapAlgorithm" aria-label="PowerMap algorithm"/);
   assert.match(settings, /id="mapSources" aria-label="MUSIC sources"/);
@@ -120,6 +122,14 @@ test('timeline exposes an accessible range loop without replacing the native see
   assert.match(html, /id="loop-toggle"[^>]*aria-label="Loop entire media"/);
   assert.doesNotMatch(html, /id="loop-clear"/);
   assert.match(html, /id="loop-time" aria-label="Loop range" aria-live="off"/);
+});
+test('both player hosts expose only generic optional plugin slots', () => {
+  const html = renderHtml({ title: 'plugins.mp4' });
+  assert.match(html, /id="plugin-panels"/);
+  assert.match(html, /id="plugin-status" role="status" hidden/);
+  assert.match(html, /data-plugins="\[\]"/);
+  const configured = renderHtml({ title: 'plugins.mp4', plugins: [{ id: 'test.example', name: '<unsafe>' }] });
+  assert.match(configured, /&lt;unsafe&gt;/);
 });
 test('header leaves filenames to the editor tab and metadata belongs to the footer', () => {
   const html = renderHtml({ title: 'review.webm', logo: 'https://local/icon.png' });

@@ -19,6 +19,7 @@
       <button id="open" title="Open media" aria-label="Open media"><i data-lucide="folder-open" aria-hidden="true"></i><span>Open</span></button>
       <button id="close" title="Close media" aria-label="Close media" disabled><i data-lucide="x" aria-hidden="true"></i></button>
       <button id="fullscreen" title="Fullscreen" aria-label="Fullscreen"><i data-lucide="maximize" aria-hidden="true"></i></button>
+      <button id="plugins-open" title="Plugins" aria-label="Plugins" aria-haspopup="dialog" aria-controls="plugins-dialog"><i data-lucide="puzzle" aria-hidden="true"></i></button>
       <button id="help" title="功能与使用说明" aria-label="功能与使用说明" aria-haspopup="dialog" aria-controls="help-dialog"><i data-lucide="circle-help" aria-hidden="true"></i></button>
       <a id="project-link" href="https://github.com/jinnsjj/pano-player" target="_blank" rel="noopener noreferrer" title="GitHub project (opens in a new tab)" aria-label="GitHub project (opens in a new tab)"><i data-lucide="external-link" aria-hidden="true"></i></a>
     </div>
@@ -34,6 +35,24 @@
     </section>
   </main>
   <div id="drop-target" hidden><span>Open media</span></div>
+  <dialog id="plugins-dialog" aria-labelledby="plugins-title">
+    <div class="help-heading"><h2 id="plugins-title">Plugins</h2><button id="plugins-close" title="Close plugins" aria-label="Close plugins"><i data-lucide="x" aria-hidden="true"></i></button></div>
+    <div class="plugins-content">
+      <div id="plugins-library">
+        <button id="plugin-install"><i data-lucide="folder-open" aria-hidden="true"></i>Install plugin</button>
+        <input id="plugin-file" type="file" accept=".panoplugin,application/json" hidden>
+        <p id="plugins-empty">No plugins installed</p>
+        <div id="plugins-list"></div>
+      </div>
+      <section id="plugin-review" aria-label="Review plugin installation" hidden>
+        <h3 id="plugin-review-name"></h3><p id="plugin-review-id"></p>
+        <p>Plugins run code inside PanoPlayer and can access media and page data. Install only packages from a source you trust. Package names are not verified identities.</p>
+        <label class="toggle"><input id="plugin-trust" type="checkbox"><span>I trust this plugin</span></label>
+        <div class="plugin-review-actions"><button id="plugin-cancel">Cancel</button><button id="plugin-confirm" disabled>Install and enable</button></div>
+      </section>
+      <p id="plugins-message" role="status" hidden></p>
+    </div>
+  </dialog>
   <dialog id="help-dialog" lang="zh-CN" aria-labelledby="help-title">
     <div class="help-heading"><h2 id="help-title">功能与使用说明</h2><button id="help-close" title="关闭说明" aria-label="关闭说明" autofocus><i data-lucide="x" aria-hidden="true"></i></button></div>
     <div class="help-content">
@@ -63,7 +82,7 @@
       <section aria-labelledby="help-privacy"><h3 id="help-privacy">本地处理与隐私</h3>
         <ul>
           <li>文件直接在本机浏览器中读取、解码和分析，不上传媒体。网站只提供网页程序资源，不使用云端转码。</li>
-          <li>仅在本机保存设置，不保存文件内容、路径或访问权限。刷新整个网页后需要重新选择文件。</li>
+          <li>仅在本机保存播放器设置和已安装插件，不保存媒体文件内容、路径或访问权限。刷新整个网页后需要重新选择媒体。</li>
         </ul>
       </section>
     </div>

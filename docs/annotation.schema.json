@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PanoPlayer Annotation Overlay v1",
+  "type": "object",
+  "required": ["version", "annotations"],
+  "properties": {
+    "version": { "const": 1 },
+    "annotations": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {
+        "type": "object",
+        "required": ["start", "end"],
+        "properties": {
+          "start": { "type": "number", "minimum": 0 },
+          "end": { "type": "number", "exclusiveMinimum": 0 },
+          "label": { "type": ["string", "null"], "maxLength": 2000 },
+          "source": { "type": ["string", "null"], "maxLength": 2000 },
+          "bbox": { "$ref": "#/$defs/bbox" },
+          "point": { "$ref": "#/$defs/point" }
+        },
+        "not": {
+          "required": ["bbox", "point"],
+          "properties": { "bbox": { "type": "array" }, "point": { "type": "array" } }
+        },
+        "$comment": "Runtime additionally checks start < end, positive bbox area, treats blank metadata as absent, and skips drawing entries with no non-null shape."
+      }
+    }
+  },
+  "$defs": {
+    "coordinate": { "type": "number", "minimum": 0, "maximum": 1 },
+    "bbox": { "type": ["array", "null"], "minItems": 4, "maxItems": 4, "items": { "$ref": "#/$defs/coordinate" } },
+    "point": { "type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/coordinate" } }
+  }
+}

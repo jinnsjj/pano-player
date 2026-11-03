@@ -6,9 +6,12 @@ const { renderHtml } = require('./webview.cjs');
 const { hostFile } = require('./host-file.cjs');
 const { normalize } = require('./preferences.cjs');
 const { openEditorMedia } = require('./editor-media.cjs');
+const { createPluginRegistry } = require('./plugin-registry.cjs');
+const bundledPlugins = require('../plugins/catalog.cjs');
 
 function activate(context) {
   const log = vscode.window.createOutputChannel('PanoPlayer');
+  const plugins = createPluginRegistry(vscode, log, bundledPlugins.map(plugin => ({ ...plugin, extensionUri: context.extensionUri })));
   let preferences = normalize(context.globalState.get('playerPreferences'));
   const provider = {
     openCustomDocument(uri) {
@@ -18,11 +21,16 @@ function activate(context) {
       if (!path.isAbsolute(uri.fsPath)) throw new Error('Media must have an absolute path on the workspace host.');
       return { uri, dispose() {} };
     },
-    resolveCustomEditor(document, panel) {
+    async resolveCustomEditor(document, panel) {
+      let closed = false;
+      const opening = panel.onDidDispose(() => { closed = true; });
+      await plugins.discover();
+      opening?.dispose();
+      if (closed) return;
       const assets = vscode.Uri.joinPath(context.extensionUri, 'media');
       // Set once: changing resource roots reloads the iframe on VS Code 1.84.
       // VS Code rejects equality with a resource root; it must be a parent directory.
-      panel.webview.options = { enableScripts: true, localResourceRoots: [assets, vscode.Uri.joinPath(document.uri, '..')] };
+      panel.webview.options = { enableScripts: true, localResourceRoots: [assets, vscode.Uri.joinPath(document.uri, '..'), ...plugins.roots()] };
       const asset = name => panel.webview.asWebviewUri(vscode.Uri.joinPath(assets, name)).toString();
       const original = panel.webview.asWebviewUri(document.uri);
       // Match the native preview's cache busting when a recording is overwritten.
@@ -34,6 +42,7 @@ function activate(context) {
         monitor: asset('monitor.js'), view: asset('view.js'), icons: asset('lucide.min.js'), logo: asset('icon.png'),
         worker: asset('powermap-worker.js'), worklet: asset('foa-capture-processor.js'),
         decoder: asset('stream-worker.js'), pcm: asset('pcm-processor.js'), stream: asset('stream-player.js'),
+        plugins: plugins.descriptors(panel.webview),
       });
       const media = hostFile(document.uri.fsPath, message => panel.webview.postMessage(message));
       const audioFiles = new Map();
@@ -89,7 +98,7 @@ function activate(context) {
       });
     },
   };
-  context.subscriptions.push(log,
+  context.subscriptions.push(log, plugins,
     vscode.commands.registerTextEditorCommand('panoPlayer.openPath', editor =>
       openEditorMedia(vscode, editor, context.extensionUri)),
     vscode.window.registerCustomEditorProvider('panoPlayer.player', provider, {
@@ -100,5 +109,6 @@ function activate(context) {
         filters: { 'Panorama media': ['mp4', 'webm', 'wav', 'flac', 'mov', 'mkv'] } }))?.[0];
       if (selected) await vscode.commands.executeCommand('vscode.openWith', selected, 'panoPlayer.player');
     }));
+  return Object.freeze({ apiVersion: 1, registerPlugin: (id, descriptor) => plugins.register(id, descriptor) });
 }
 module.exports = { activate };

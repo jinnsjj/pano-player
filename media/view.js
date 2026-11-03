@@ -33,6 +33,7 @@ class FoaView {
     this.gridMaterial = new MeshBasicMaterial({ map: this.gridTexture, transparent: true, depthWrite: false });
     this.grid = new Mesh(this.geometry, this.gridMaterial); this.grid.scale.setScalar(.984);
     this.grid.visible = false; this.grid.renderOrder = 1; this.scene.add(this.grid);
+    this.overlayLayers = new Map();
     this.gpu = new WebGLRenderer({ antialias: true });
     this.gpu.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
     host.append(this.gpu.domElement);
@@ -101,6 +102,25 @@ class FoaView {
     this.grid.visible = enabled; this.gridTexture.needsUpdate = true;
     this.thumbnailAt = 0; this.render();
   }
+  setOverlayLayer(id, canvas, visible, order = 2) {
+    let layer = this.overlayLayers.get(id);
+    if (!layer && visible) {
+      const texture = new CanvasTexture(canvas); texture.colorSpace = SRGBColorSpace;
+      texture.minFilter = texture.magFilter = LinearFilter; texture.generateMipmaps = false;
+      const material = new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false });
+      const mesh = new Mesh(this.geometry, material); mesh.scale.setScalar(.976);
+      mesh.renderOrder = order; this.scene.add(mesh);
+      layer = { texture, material, mesh }; this.overlayLayers.set(id, layer);
+    }
+    if (!layer) return;
+    layer.mesh.visible = visible; layer.texture.needsUpdate = true;
+    this.thumbnailAt = -Infinity; this.render();
+  }
+  removeOverlayLayer(id) {
+    const layer = this.overlayLayers.get(id); if (!layer) return;
+    this.scene.remove(layer.mesh); layer.texture.dispose(); layer.material.dispose(); this.overlayLayers.delete(id);
+    this.thumbnailAt = -Infinity; this.render();
+  }
   setOverviewEnabled(enabled) {
     if (this.overviewEnabled === enabled) return;
     this.overviewEnabled = enabled;
@@ -154,11 +174,16 @@ class FoaView {
     }
     ctx.drawImage(this.mapTexture.image, 0, 0, 240, 120);
     if (this.grid.visible) ctx.drawImage(this.gridTexture.image, 0, 0, 240, 120);
+    for (const layer of [...this.overlayLayers.values()].sort((a, b) => a.mesh.renderOrder - b.mesh.renderOrder)) {
+      if (layer.mesh.visible) ctx.drawImage(layer.texture.image, 0, 0, 240, 120);
+    }
     ctx.drawImage(this.footprint, 0, 0);
   }
   dispose() {
     this.events.abort(); this.resize.disconnect();
     for (const resource of [this.geometry, this.videoTexture, this.mapTexture, this.gridTexture, this.picture, this.heatmap, this.gridMaterial, this.gpu]) resource.dispose();
+    for (const layer of this.overlayLayers.values()) { layer.texture.dispose(); layer.material.dispose(); }
+    this.overlayLayers.clear();
     this.gpu.domElement.remove();
     this.thumbnail.remove();
   }

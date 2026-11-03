@@ -1,6 +1,7 @@
 const { build } = require('esbuild');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const bundledPlugins = require('./plugins/catalog.cjs');
 
 async function buildMedia(outdir = path.join(__dirname, 'media')) {
   for (const [input, output] of [
@@ -18,6 +19,14 @@ async function buildMedia(outdir = path.join(__dirname, 'media')) {
       platform: 'browser', target: 'chrome114', minify: true, legalComments: 'inline' });
   }
   await fs.copyFile(path.join(__dirname, 'node_modules/lucide/LICENSE'), path.join(outdir, 'LICENSE-lucide.txt'));
+  for (const plugin of bundledPlugins) {
+    const script = path.join(outdir, path.relative('media', plugin.script));
+    await fs.mkdir(path.dirname(script), { recursive: true });
+    await build({ entryPoints: [path.join(__dirname, plugin.entry)], bundle: true,
+      outfile: script, format: 'esm', platform: 'browser', target: 'chrome114',
+      minify: true, legalComments: 'inline' });
+    await fs.copyFile(path.join(__dirname, plugin.stylesheet), path.join(outdir, path.relative('media', plugin.style)));
+  }
 }
 module.exports = { buildMedia };
 if (require.main === module) buildMedia().catch(error => { console.error(error); process.exitCode = 1; });

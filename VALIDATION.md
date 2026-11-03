@@ -1,6 +1,6 @@
 # PanoPlayer Validation
 
-Source version: 0.4.35. Updated 2026-10-27.
+Source version: 0.4.38. Updated 2026-11-03.
 
 ## Naming
 
@@ -25,6 +25,16 @@ links, absence of obsolete runtime identifiers and exclusion of nested VSIX arch
 FFmpeg/libav objects must be fetched through Git LFS before packaging.
 
 ## Acceptance Boundary
+
+Version 0.4.38: 182 automated checks passed, one optional codec fixture test
+skipped. Local Chrome covered default bundled-plugin loading, independent
+Overlay visibility/disclosure controls, annotation import, geometry-only and
+missing-position records, optional captions/source filters, format help and
+plugin enablement persistence at 1440/390/320 px. Geometry-only Labels toggles
+produced identical canvas pixels, and missing-position-only input left no
+visible overlay. Existing populated annotation files retained their results.
+No browser exceptions or media uploads were observed. This does not establish
+annotation factual accuracy or fresh installed desktop/Remote-SSH acceptance.
 
 Version 0.4.35: 133 automated checks passed, one optional codec fixture test skipped;
 the static web build and its six host/build checks passed. Local Chrome regressions

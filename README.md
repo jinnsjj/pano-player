@@ -64,6 +64,13 @@ Auto reevaluates each video, rotation and stereo layout. It is a heuristic, not 
 
 **Rotation** corrects the source image clockwise by **0°, 90°, 180° or 270°** before stereo cropping and projection. Panorama, Perspective and the overview use the same corrected image; audio and direction overlays stay in their original coordinate system.
 
+**Annotation** is a bundled, open-source plugin, enabled by default. Expand
+**Overlay > Annotation** to open a local JSON file with timed bbox or point
+annotations, labels and independent source filters. See the [annotation format](docs/ANNOTATIONS.md).
+Additional plugins can add settings and source-aligned canvas layers without
+changing the player and can be installed separately.
+See the [plugin interface and installation guide](docs/PLUGINS.md).
+
 ### Projection Examples
 
 ERP and EAC store the surrounding scene in different layouts. Select the matching

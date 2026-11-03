@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.38 - 2026-11-03
+
+### Added
+
+- Plugin interface with settings panels and source-aligned canvas layers.
+- Open-source Annotation plugin, bundled and enabled by default on web and VS Code, with an expandable Overlay entry for local bbox/point JSON, labels and source filters.
+- Separately installed companion extensions and trusted local web plugin packages.
+
+### Changed
+
+- Accept optional annotation labels, sources and positions; omit missing caption text and skip drawing entries without a bbox or point while preserving time and geometry validation.
+- Align Grid, PowerMap and Annotation with independent visibility checkboxes and inline settings disclosures; collapsing settings does not hide overlays.
+- Build the web player from an explicit asset allowlist and remove stale output before each build.
+- Defer observed playback-area height updates to avoid resize notification loops during projection changes.
+
 ## 0.4.37 - 2026-10-29
 
 ### Added

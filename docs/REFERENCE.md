@@ -126,10 +126,12 @@ The video and transport stay fixed while the lower settings area scrolls indepen
 Dragging the divider changes playback height while reserving space for settings;
 double-click it to restore the automatic height.
 
-Controls are grouped into Projection, Overlay and Audio rows. Grid and PowerMap each
-have an independent toggle and a collapsible settings menu for opacity. PowerMap's
-menu also contains algorithm and source count; Sources is disabled under PWD.
-Menus start closed, close on outside clicks or Escape, and support keyboard navigation.
+Controls are grouped into Projection, Overlay and Audio rows. Grid, PowerMap and
+Annotation each have an independent visibility checkbox and settings arrow.
+Settings start collapsed and expand inline below Overlay, without changing the
+checkbox or closing other expanded settings. Grid exposes opacity; PowerMap
+also exposes algorithm and source count; Sources is disabled under PWD.
+Escape inside a settings section collapses it and returns focus to its arrow.
 The Panorama/Perspective tabs and Reset view
 button sit in the transport bar. View tabs use compact icons with hover labels and
 keyboard navigation. Grid and PowerMap each form a bordered control group. Controls

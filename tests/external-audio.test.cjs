@@ -34,7 +34,10 @@ test('external audio is selected by the host and read by opaque ID without widen
     const panel = { onDidDispose: fn => { dispose = fn; }, onDidChangeViewState: () => disposable,
       webview: { cspSource: 'self', asWebviewUri: value => value,
         onDidReceiveMessage: fn => { receive = fn; return disposable; }, postMessage: message => replies.push(message) } };
-    provider.resolveCustomEditor(provider.openCustomDocument(uri('/workspace/video.mp4')), panel);
+    await provider.resolveCustomEditor(provider.openCustomDocument(uri('/workspace/video.mp4')), panel);
+    assert.match(panel.webview.html, /shijunjie\.pano-player-annotations/);
+    assert.match(panel.webview.html, /\/extension\/media\/plugins\/annotations\.js/);
+    assert.match(panel.webview.html, /\/extension\/media\/plugins\/annotations\.css/);
     const roots = panel.webview.options.localResourceRoots;
     receive({ type: 'select-audio' }); await new Promise(setImmediate);
     const source = replies.find(reply => reply.type === 'audio-source').source;
