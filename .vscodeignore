@@ -28,6 +28,7 @@
 !media/audio-switch.js
 !media/channel-mapper.js
 !media/channel-routing.js
+!media/codec-info.js
 !media/direction-grid.js
 !media/envelope.js
 !media/floating-overlay.js
@@ -37,6 +38,9 @@
 !media/libav-6.10.7.1.5-decoder-aac.js
 !media/libav-6.10.7.1.5-decoder-aac.wasm.js
 !media/libav-6.10.7.1.5-decoder-aac.wasm.wasm
+!media/libav-6.10.7.1.5-decoder-hevc.js
+!media/libav-6.10.7.1.5-decoder-hevc.wasm.js
+!media/libav-6.10.7.1.5-decoder-hevc.wasm.wasm
 !media/loop-range.js
 !media/lucide.min.js
 !media/meter.js

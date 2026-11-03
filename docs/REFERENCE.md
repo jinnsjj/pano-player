@@ -148,6 +148,15 @@ Startup and seeking depend on network speed; the browser must allow Web Audio, W
 WASM and video decoding. Browser-only vscode.dev without a remote host is unsupported.
 Source media is not modified or uploaded to a third-party service.
 
+HEVC video uses native WebCodecs when the environment supports the file's
+configuration. Otherwise, the player loads its bundled FFmpeg/WASM HEVC decoder;
+this also works in VS Code webviews without native HEVC. Main and Main 10 retain
+their decoded YUV precision. Software decoding is not guaranteed to reach real
+time for large frames or high frame rates; the PCM clock buffers with slow
+video instead of letting audio run ahead. The information footer shows video
+codec, video decoder backend, and the currently selected audio codec. Hover the
+footer for the complete codec strings.
+
 ## Development
 
 ```sh

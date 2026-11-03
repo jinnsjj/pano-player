@@ -73,6 +73,8 @@ test('video-only worker opens and serves frames without audio decoders', async (
   const track = { getDecoderConfig: async () => ({ codedWidth: 640, codedHeight: 320 }) };
   const source = fs.readFileSync(require.resolve('../src/stream-worker.js'), 'utf8').replace(/^import .*;\n/gm, '');
   vm.runInNewContext(source, { self, postMessage: data => sent.push(data), resourceFetch() {},
+    prepareVideoDecoder: async () => 'WebCodecs',
+    cancelHevcDecoding() {},
     Input: class {
       getAudioTracks = async () => [];
       getPrimaryAudioTrack = async () => null;
@@ -104,6 +106,7 @@ test('AAC metadata and envelope use the decoder header channel count before play
       getName: async () => '', getLanguageCode: async () => 'und' };
     const source = fs.readFileSync(require.resolve('../src/stream-worker.js'), 'utf8').replace(/^import .*;\n/gm, '');
     vm.runInNewContext(source, { self, postMessage: data => sent.push(data), Blob, URL, importScripts() {},
+      loadLibav: async () => ({}),
       resourceFetch: async () => ({ ok: true, text: async () => '' }),
       Input: class {
         getAudioTracks = async () => [track]; getPrimaryAudioTrack = async () => track;

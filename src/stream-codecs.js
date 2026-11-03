@@ -10,7 +10,8 @@ async function openAacDecoder(config) {
   if (!description?.byteLength) throw new Error('Missing audio codec header.');
   const bytes = description instanceof ArrayBuffer ? new Uint8Array(description) :
     new Uint8Array(description.buffer, description.byteOffset, description.byteLength);
-  const libav = await globalThis.LibAV.LibAV({ noworker: true, ...globalThis.foaLibavOptions });
+  const { wrapper = globalThis.LibAV, ...options } = globalThis.foaLibavOptions ?? {};
+  const libav = await wrapper.LibAV({ noworker: true, ...options });
   let decoder;
   try {
     decoder = await libav.ff_init_decoder('aac', {

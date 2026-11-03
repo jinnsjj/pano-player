@@ -2,6 +2,8 @@ import { Input, UrlSource, BlobSource, ALL_FORMATS, AudioSampleSink, VideoSample
 import { getAacChannelCount, setWebmOpusTiming } from './stream-codecs.js';
 import { resourceFetch } from './resource-fetch.js';
 import { scanEnvelope } from './envelope.js';
+import { loadLibav } from './libav-loader.js';
+import { prepareVideoDecoder, cancelHevcDecoding } from './hevc-decoder.js';
 
 globalThis.fetch = resourceFetch;
 
@@ -9,6 +11,7 @@ let input, audioSink, videoSink, audio, video, pendingAudio, epoch = 0, audioCur
 let channelCount = 4;
 const send = (message, transfer = []) => postMessage({ ...message, epoch }, transfer);
 function position(time) {
+  if (videoSink) cancelHevcDecoding();
   void audio?.return().catch(() => {}); void video?.return().catch(() => {});
   pendingAudio?.close(); pendingAudio = undefined;
   audioCursor = Math.round(time * rate);
@@ -22,7 +25,7 @@ function createInput(url, file) {
     handleUnhandledError: error => send({ type: 'error', message: error.message }),
   }) });
 }
-async function open(url, libav, selectedTrack, time = 0, envelope = false, file, audioOnly = false) {
+async function open(url, libav, selectedTrack, time = 0, envelope = false, file, audioOnly = false, hevc) {
   input?.dispose();
   input = createInput(url, file);
   const tracks = await input.getAudioTracks();
@@ -45,15 +48,7 @@ async function open(url, libav, selectedTrack, time = 0, envelope = false, file,
   if (!audioTrack && !sourceVideoTrack) throw new Error('No audio or video track found.');
   const config = await audioTrack?.getDecoderConfig();
   if (audioTrack?.codec === 'aac') {
-    // VS Code resource service workers support fetch, not cross-origin importScripts.
-    for (const source of [libav, libav.replace(/\.js$/, '.wasm.js')]) {
-      const response = await fetch(source);
-      if (!response.ok) throw new Error(`Cannot load AAC decoder (${response.status}).`);
-      const blob = URL.createObjectURL(new Blob([await response.text()], { type: 'text/javascript' }));
-      try { importScripts(blob); } finally { URL.revokeObjectURL(blob); }
-    }
-    globalThis.foaLibavOptions = { factory: globalThis.LibAVFactory,
-      wasmurl: libav.replace(/\.js$/, '.wasm.wasm') };
+    globalThis.foaLibavOptions = await loadLibav(libav);
   }
   const webm = ['WebM', 'Matroska'].includes((await input.getFormat()).name);
   const first = webm && audioTrack?.codec === 'opus' ? await new EncodedPacketSink(audioTrack).getFirstPacket({ metadataOnly: true }) : null;
@@ -72,9 +67,12 @@ async function open(url, libav, selectedTrack, time = 0, envelope = false, file,
     } finally { input.dispose(); }
     return;
   }
+  const videoDecoder = videoTrack ? await prepareVideoDecoder(videoTrack.codec, videoConfig, hevc) : null;
   videoSink = videoTrack ? new VideoSampleSink(videoTrack) : undefined;
   position(time);
   send({ type: 'metadata', sampleRate: rate, channels: channelCount, codec: audioTrack?.codec ?? null,
+    audioCodecString: config?.codec ?? null, videoCodec: videoTrack?.codec ?? null,
+    videoCodecString: videoConfig?.codec ?? null, videoDecoder,
     audioTracks, audioTrackIndex,
     width: videoConfig?.codedWidth || 0, height: videoConfig?.codedHeight || 0,
     duration });
@@ -130,6 +128,6 @@ self.onmessage = ({ data }) => {
   if (data.type === 'seek') { epoch = data.epoch; position(data.time); return; }
   if (data.epoch !== epoch && data.type !== 'open') return;
   const generation = epoch;
-  const task = data.type === 'open' ? open(data.url, data.libav, data.audioTrackIndex, data.time, data.envelope, data.file, data.audioOnly) : data.type === 'audio' ? pullAudio(generation) : pullVideo(generation);
+  const task = data.type === 'open' ? open(data.url, data.libav, data.audioTrackIndex, data.time, data.envelope, data.file, data.audioOnly, data.hevc) : data.type === 'audio' ? pullAudio(generation) : pullVideo(generation);
   void task.catch(error => { if (generation === epoch && (data.type !== 'audio' || audio)) send({ type: 'error', message: error.message }); });
 };

@@ -116,6 +116,9 @@ const path = require('node:path');
     await frame.waitForFunction(() => !__PANO_PLAYER__.getState().switchingTrack);
     assert.equal(await frame.evaluate(() => __PANO_PLAYER__.getState().audioTrackIndex), 1);
     assert.equal(await frame.evaluate(() => originalVideo.ended), true);
+    await page.waitForTimeout(300);
+    assert.equal(await frame.evaluate(() => originalVideo.error?.message || __PANO_PLAYER__.monitor.video.error?.message), undefined,
+      'Leaving an EOF replacement paused must not overflow its prebuffered PCM');
     await frame.locator('#play').click();
     await frame.waitForFunction(() => originalVideo.currentTime > .2 && originalVideo.currentTime < 2);
     await page.locator('#file-input').setInputFiles(path.resolve(__dirname, '../output/playwright/silent.webm'));

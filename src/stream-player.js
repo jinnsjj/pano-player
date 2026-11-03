@@ -41,6 +41,7 @@ export class StreamPlayer extends EventTarget {
       this.worker.postMessage({ type: 'open', url: this.dataset.source, file: this.file,
         audioOnly: this.audioOnly,
         epoch: this.epoch, audioTrackIndex: this.audioTrackIndex, time: this.time,
+        hevc: new URL('libav-6.10.7.1.5-decoder-hevc.js', this.dataset.decoder).href,
         libav: new URL('libav-6.10.7.1.5-decoder-aac.js', this.dataset.decoder).href });
     } catch (error) { this.fail(error); }
   }
@@ -79,6 +80,9 @@ export class StreamPlayer extends EventTarget {
       this.sampleRate = data.sampleRate; this.duration = data.duration ?? NaN;
       this.channels = data.channels;
       this.audioTracks = data.audioTracks ?? []; this.audioTrackIndex = data.audioTrackIndex;
+      this.audioCodecString = data.audioCodecString;
+      this.videoCodec = data.videoCodec; this.videoCodecString = data.videoCodecString;
+      this.videoDecoder = data.videoDecoder;
       this.videoWidth = data.width; this.videoHeight = data.height;
       this.element.width = Math.max(1, data.width); this.element.height = Math.max(1, data.height);
       this.codec = data.codec; this.readyState = 1; this.metadataReady(); this.emit('loadedmetadata');
@@ -97,7 +101,9 @@ export class StreamPlayer extends EventTarget {
     } else if (data.type === 'video') {
       this.videoPending = false; this.nextFrame = data;
       this.render();
-    } else if (data.type === 'video-end') { this.videoPending = false; this.videoEnded = true; }
+    } else if (data.type === 'video-end') {
+      this.videoPending = false; this.videoEnded = true; this.updateVideoBuffering();
+    }
   }
   async attach(context, destination) {
     await this.metadata;
@@ -127,7 +133,7 @@ export class StreamPlayer extends EventTarget {
     this.node.port.postMessage({ type: 'seek', frame: Math.round(this.time * this.sampleRate), epoch: this.epoch });
     if (this.channelRouting) this.setChannelRouting(this.channelRouting);
     this.refill();
-    if (!this.paused) this.node.port.postMessage({ type: 'play', epoch: this.epoch });
+    if (!this.paused && !this.videoBlocked) this.node.port.postMessage({ type: 'play', epoch: this.epoch });
   }
   setChannelRouting(routing) {
     if (this.audioSession) return this.audioSession.setChannelRouting(routing);
@@ -137,7 +143,8 @@ export class StreamPlayer extends EventTarget {
     return true;
   }
   refill() {
-    if (this.audioSession || !this.node || this.eof || this.audioPending || (this.endFrame / this.sampleRate - this.time) > 2) return;
+    // EOF handoffs preserve the end position while their PCM is primed at zero.
+    if (this.audioSession || !this.node || this.eof || this.ended || this.audioPending || (this.endFrame / this.sampleRate - this.time) > 2) return;
     this.audioPending = true; this.worker.postMessage({ type: 'audio', epoch: this.epoch });
   }
   requestVideo() {
@@ -145,12 +152,27 @@ export class StreamPlayer extends EventTarget {
     this.videoPending = true; this.worker.postMessage({ type: 'video', epoch: this.epoch });
   }
   advanceVideoClock() {
-    if (this.audioSession || this.channels !== 0 || this.paused || this.clockStartedAt === undefined) return;
+    if (this.audioSession || this.channels !== 0 || this.paused || this.videoBlocked || this.clockStartedAt === undefined) return;
     const now = performance.now();
     this.time += (now - this.clockStartedAt) / 1000;
     this.clockStartedAt = now;
     if (Number.isFinite(this.duration)) this.time = Math.min(this.time, this.duration);
     this.emit('timeupdate');
+  }
+  updateVideoBuffering() {
+    if (this.videoDecoder !== 'FFmpeg/WASM' || this.audioOnly) return;
+    const waiting = this.previewFrame || (!this.videoEnded && this.videoEndTime !== undefined &&
+      this.time > this.videoEndTime + .08);
+    const session = this.audioSession ?? this;
+    if (this.videoBlocked === waiting && session.videoBlocked === waiting) return;
+    this.videoBlocked = session.videoBlocked = waiting;
+    // Keep the consumed-PCM clock close to slow software video, without dropping source samples.
+    if (waiting) this.clockStartedAt = session.clockStartedAt = undefined;
+    else if (!this.paused && !this.channels) session.clockStartedAt = performance.now();
+    if (!this.paused) {
+      session.node?.port.postMessage({ type: waiting ? 'pause' : 'play', epoch: session.epoch });
+      this.emit(waiting ? 'waiting' : 'playing');
+    }
   }
   render() {
     this.audioSession?.advanceVideoClock();
@@ -162,8 +184,8 @@ export class StreamPlayer extends EventTarget {
       frame.frame.close(); this.nextFrame = undefined; this.frames++;
       // A decoded picture is available even while the audio pipeline is initializing.
       this.readyState = Math.max(this.readyState, 2);
+      this.videoEndTime = frame.time + frame.duration;
       if (this.channels === 0) {
-        this.videoEndTime = frame.time + frame.duration;
         if (this.readyState < 3 || this.seeking) {
           this.readyState = 3; this.seeking = false; this.emit('canplay'); this.emit('seeked');
         }
@@ -172,6 +194,7 @@ export class StreamPlayer extends EventTarget {
       if (this.time - frame.time > .1) this.dropped++;
       this.emit('loadeddata'); this.requestVideo();
     }
+    this.updateVideoBuffering();
     if (this.channels === 0 && this.videoEnded && !this.paused) {
       const end = Number.isFinite(this.duration) ? this.duration : this.videoEndTime ?? this.time;
       if (this.time >= end) {
@@ -183,15 +206,16 @@ export class StreamPlayer extends EventTarget {
   async play() {
     if (this.audioSession) {
       if (this.ended) await this.seek(0);
+      this.updateVideoBuffering();
       return this.audioSession.play();
     }
     if (this.error) throw this.error;
     if (this.ended) await this.seek(0);
-    this.paused = false; this.emit('play');
-    if (this.channels === 0 && (!this.previewFrame || this.audioOnly)) this.clockStartedAt = performance.now();
+    this.paused = false; this.updateVideoBuffering(); this.emit('play');
+    if (!this.videoBlocked && this.channels === 0 && (!this.previewFrame || this.audioOnly)) this.clockStartedAt = performance.now();
     await this.context?.resume();
-    this.node?.port.postMessage({ type: 'play', epoch: this.epoch });
-    this.emit('playing');
+    if (!this.videoBlocked) this.node?.port.postMessage({ type: 'play', epoch: this.epoch });
+    this.emit(this.videoBlocked ? 'waiting' : 'playing');
   }
   pause() {
     if (this.audioSession) { this.audioSession.pause(); return; }
@@ -208,6 +232,7 @@ export class StreamPlayer extends EventTarget {
     this.nextFrame?.frame.close(); this.nextFrame = undefined; this.videoPending = false; this.videoEnded = false;
     this.previewFrame = true;
     this.clockStartedAt = undefined; this.videoEndTime = undefined;
+    this.updateVideoBuffering();
     this.node?.port.postMessage({ type: 'seek', frame: Math.round(this.time * this.sampleRate), epoch: this.epoch });
     this.worker.postMessage({ type: 'seek', time: this.time, epoch: this.epoch });
     if (this.audioSession) {
@@ -221,7 +246,7 @@ export class StreamPlayer extends EventTarget {
       if (!this.paused) this.clockStartedAt = performance.now();
       this.emit('seeked');
     }
-    if (!this.paused) this.node?.port.postMessage({ type: 'play', epoch: this.epoch });
+    if (!this.paused && !this.videoBlocked) this.node?.port.postMessage({ type: 'play', epoch: this.epoch });
   }
   getVideoPlaybackQuality() { return { totalVideoFrames: this.frames, droppedVideoFrames: this.dropped }; }
   alignAudio(time) {
@@ -244,7 +269,7 @@ export class StreamPlayer extends EventTarget {
     }
     this.audioSession = session;
     this.audioEvents = new AbortController();
-    for (const key of ['channels', 'sampleRate', 'audioTracks', 'audioTrackIndex', 'codec']) this[key] = session[key];
+    for (const key of ['channels', 'sampleRate', 'audioTracks', 'audioTrackIndex', 'codec', 'audioCodecString']) this[key] = session[key];
     this.duration = Number.isFinite(this.originalDuration) && Number.isFinite(session.duration)
       ? Math.min(this.originalDuration, session.duration) : this.originalDuration;
     const sync = () => {
@@ -252,6 +277,7 @@ export class StreamPlayer extends EventTarget {
       this.ended = session.ended; this.seeking = session.seeking;
     };
     sync();
+    this.updateVideoBuffering();
     for (const type of ['timeupdate', 'play', 'playing', 'pause', 'waiting', 'ended', 'seeking', 'seeked', 'error', 'envelope']) {
       session.addEventListener(type, () => {
         sync();

@@ -41,10 +41,14 @@ excluded from the VSIX. Python, NumPy, SciPy and OpenCV are not required.
 
 ## Streaming Codecs
 
-The player bundles a decoder-only LGPL FFmpeg 7.1.5 AAC WebAssembly build through
-libav.js. No host FFmpeg installation is required. Its license is in
+The player bundles separate decoder-only LGPL FFmpeg 7.1.5 AAC and HEVC WebAssembly
+builds through libav.js. No GPL or nonfree FFmpeg components are enabled, and no
+host FFmpeg installation is required. Their license is in
 `media/LICENSE-ffmpeg.txt`; corresponding source archives and rebuild instructions
 are distributed in `codec-sources/`.
+
+The HEVC variant is loaded only when native WebCodecs cannot decode the selected
+HEVC configuration. Its MIT application adapter is `src/hevc-decoder.js`.
 
 Mediabunny 1.56.2 (MPL-2.0) supplies incremental MP4, WebM and WAV demuxing and
 WebCodecs video integration. Its source archive and license are included.

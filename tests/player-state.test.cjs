@@ -89,6 +89,29 @@ function setup(saved = {}) {
   return { get, messages, onMap, onError, tick: now => frame(now), monitor: window.__PANO_PLAYER__.monitor,
     persisted: () => persisted, state: () => window.__PANO_PLAYER__.getState() };
 }
+test('information footer follows the active audio codec without replacing the video codec', () => {
+  const s = setup(), video = s.get('video');
+  Object.assign(video, { videoCodec: 'hevc', videoDecoder: 'FFmpeg/WASM', videoCodecString: 'hvc1.1.6.L93.B0',
+    channels: 6, codec: 'aac', audioCodecString: 'mp4a.40.2' });
+  video.fire('loadedmetadata');
+  assert.match(s.get('detail').textContent, /Video: HEVC \(H.265\).*FFmpeg\/WASM.*Audio: AAC/);
+  assert.equal(s.get('detail').title, 'hvc1.1.6.L93.B0 / mp4a.40.2');
+  video.codec = 'opus'; video.audioCodecString = 'opus'; video.fire('loadedmetadata');
+  assert.match(s.get('detail').textContent, /Video: HEVC.*Audio: Opus/);
+  assert.doesNotMatch(s.get('detail').textContent, /Audio: AAC/);
+});
+
+test('audio readiness does not hide software HEVC loading before its first picture', () => {
+  const s = setup(), video = s.get('video');
+  Object.assign(video, { videoCodec: 'hevc', videoDecoder: 'FFmpeg/WASM', frames: 0 });
+  video.fire('loadedmetadata'); video.fire('canplay');
+  assert.equal(s.get('empty').hidden, false);
+  assert.equal(s.get('status').textContent, 'Decoding HEVC video');
+  assert.equal(s.get('play').disabled, false);
+  video.frames = 1; video.fire('loadeddata');
+  assert.equal(s.get('empty').hidden, true);
+});
+
 test('range loop shares transport seek/reset events without persisting transient selection', async () => {
   const s = setup(), video = s.get('video');
   video.currentTime = 2; s.get('loop-toggle').fire('click');

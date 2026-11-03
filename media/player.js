@@ -10,6 +10,7 @@ import { ChannelMapper } from './channel-mapper.js';
 import { createRouting } from './channel-routing.js';
 import { attachLoopRange } from './loop-range.js';
 import { PlayerPlugins } from './plugins.js';
+import { codecInfo } from './codec-info.js';
 import { attachOverlayDisclosure } from './overlay-controls.js';
 (() => {
   'use strict';
@@ -195,7 +196,7 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
   }
   function updateDetail() {
     if (processingIssue) return;
-    const items = [mediaDetail];
+    const items = [mediaDetail, ...codecInfo(video)];
     if (video.channels === 0) items.push('No audio');
     else {
       if (video.channels) items.push(video.channels + 'ch');
@@ -212,6 +213,7 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
     }
     const text = items.join(' · ');
     if ($('detail').textContent !== text) $('detail').textContent = text;
+    $('detail').title = [video.videoCodecString, video.channels > 0 && video.audioCodecString].filter(Boolean).join(' / ');
   }
   function tick(now) {
     if (disposed) return;
@@ -278,7 +280,10 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
     if (stats.firstFrameMs === null) { stats.firstFrameMs = performance.now(); diagnostic('First decoded frame: ' + stats.firstFrameMs.toFixed(1) + ' ms'); }
   }
   function canPlay() {
-    ready = true; $('empty').hidden = true;
+    ready = true;
+    const waitingForHevc = hasVideo && video.videoDecoder === 'FFmpeg/WASM' && !video.frames;
+    $('empty').hidden = !waitingForHevc;
+    if (waitingForHevc) $('status').textContent = 'Decoding HEVC video';
     $('audio-track').disabled = $('audio-open').disabled = false;
     $('play').disabled = false; $('mute').disabled = video.channels === 0; transport();
     if (stats.canPlayMs === null) { stats.canPlayMs = performance.now(); diagnostic('Streaming canplay: ' + stats.canPlayMs.toFixed(1) + ' ms'); }

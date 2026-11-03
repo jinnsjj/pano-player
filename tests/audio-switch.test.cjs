@@ -68,6 +68,20 @@ test('pause during preparation stays paused at handoff', async () => {
   assert.equal(s.sessions[0].played, undefined); assert.equal(s.sessions[0].paused, true);
 });
 
+test('switching at EOF primes the beginning but preserves the paused end position until replay', async () => {
+  const s = setup();
+  s.main.currentTime = 5; s.main.paused = true; s.main.ended = true;
+  await s.switcher.select({ id: 'primary' }, 1);
+  const session = s.sessions[0];
+  assert.equal(session.options.time, 0);
+  assert.equal(session.aligned, 0);
+  assert.equal(session.time, 5);
+  assert.equal(session.ended, true);
+  assert.equal(session.paused, true);
+  assert.equal(session.played, undefined);
+  assert.equal(s.main.currentTime, 5);
+});
+
 test('failed replacement keeps the previous audio, clock and video intact', async () => {
   const s = setup(); s.prepare(Promise.reject(new Error('Unsupported codec')));
   await assert.rejects(s.switcher.select({ id: 'broken' }), /Unsupported/);

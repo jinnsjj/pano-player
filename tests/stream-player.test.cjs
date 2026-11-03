@@ -113,6 +113,112 @@ test('stream player closes stale frames, preserves seek epochs and bounds PCM pr
   assert.equal(messages.length, count + 1, 'Only one audio request may be in flight');
 });
 
+test('an ended audio handoff cannot overfill the paused PCM ring and replay resets its clock', async () => {
+  const bundle = buildSync({ stdin: { contents: `
+    export { StreamPlayer } from './src/stream-player.js';
+    import './src/powermap/wav-stream-processor.js';`, resolveDir: path.resolve(__dirname, '..') },
+    bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
+  let Processor;
+  const notices = [], requests = [];
+  const rate = 48000, channels = 6, packetFrames = rate * .4;
+  const context = { module: { exports: {} }, exports: {}, window: {}, EventTarget, Event, AbortController,
+    fetch, Float32Array, setTimeout, performance, sampleRate: rate,
+    AudioWorkletProcessor: class { port = { postMessage(message) { notices.push(message); } }; },
+    registerProcessor(name, type) { Processor = type; },
+  };
+  vm.runInNewContext(bundle, context);
+  const { StreamPlayer } = context.module.exports;
+  StreamPlayer.prototype.load = () => {};
+  StreamPlayer.prototype.startEnvelope = () => {};
+  const player = new StreamPlayer({ dataset: {} }, { audioOnly: true });
+  const processor = new Processor({ processorOptions: { channels, sourceSampleRate: rate,
+    capacityFrames: rate * 4, lowWatermarkFrames: rate } });
+  player.node = { port: { postMessage(message) { processor.handleMessage(message); } } };
+  let cursor = packetFrames;
+  player.worker = { postMessage(message) {
+    if (message.type === 'audio') requests.push(message);
+    if (message.type === 'seek') cursor = Math.round(message.time * rate);
+  } };
+  player.receive({ type: 'metadata', epoch: 0, sampleRate: rate, channels, width: 0, height: 0, duration: 5 });
+  const chunk = length => Array.from({ length: channels }, (_, channel) => new Float32Array(length).fill((channel + 1) / 10));
+  player.receive({ type: 'audio', epoch: 0, channels: chunk(packetFrames), endFrame: cursor, eof: false });
+  assert.equal(requests.length, 1, 'A decode request is already in flight when the handoff commits');
+  // EOF switching primes the replacement at zero but preserves the visible end position.
+  player.time = 5; player.ended = true;
+  const drain = () => {
+    let delivered = 0;
+    while (requests.length && delivered++ < 30) {
+      const request = requests.shift();
+      const length = Math.min(packetFrames, rate * 5 - cursor);
+      cursor += length;
+      player.receive({ type: 'audio', epoch: request.epoch, channels: chunk(length), endFrame: cursor, eof: cursor === rate * 5 });
+    }
+    assert.equal(requests.length, 0, 'Prefetch must become idle without consuming paused audio');
+  };
+  drain();
+  assert.deepEqual(notices.filter(message => message.type === 'error'), [], 'EOF handoff must not overflow the real PCM worklet');
+  assert.ok(cursor <= rate * 1.2, 'Only the in-flight decode may complete after EOF');
+  assert.equal(player.currentTime, 5);
+  assert.equal(player.ended, true);
+  assert.equal(processor.playing, false);
+  await player.play();
+  drain();
+  assert.equal(player.currentTime, 0);
+  assert.equal(player.epoch, 1);
+  assert.equal(player.ended, false);
+  assert.equal(processor.epoch, 1);
+  const output = Array.from({ length: channels }, () => new Float32Array(128));
+  processor.process([], [output]);
+  for (let channel = 0; channel < channels; channel++) assert.equal(output[channel][0], Math.fround((channel + 1) / 10));
+  assert.equal(processor.sourceFrame, 128);
+  assert.deepEqual(notices.filter(message => message.type === 'error'), []);
+});
+
+test('software video buffers the consumed-PCM clock, including initial playback, pause and seek', async () => {
+  const bundle = buildSync({ entryPoints: [path.join(__dirname, '../src/stream-player.js')],
+    bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
+  const context = { module: { exports: {} }, exports: {}, window: {}, EventTarget, Event,
+    AbortController, fetch, performance };
+  vm.runInNewContext(bundle, context);
+  const { StreamPlayer } = context.module.exports;
+  StreamPlayer.prototype.load = StreamPlayer.prototype.startEnvelope = () => {};
+  const player = new StreamPlayer({ dataset: {}, getContext: () => ({ drawImage() {} }) });
+  const messages = [];
+  player.worker = { postMessage() {} };
+  player.node = { port: { postMessage: message => messages.push(message) } };
+  player.receive({ type: 'metadata', epoch: 0, channels: 6, sampleRate: 48000, duration: 5,
+    width: 640, height: 320, videoCodec: 'hevc', videoDecoder: 'FFmpeg/WASM' });
+  await player.play();
+  assert.equal(player.paused, false, 'Buffering is not a user pause');
+  assert.equal(player.videoBlocked, true);
+  assert.equal(messages.at(-1).type, 'pause', 'PCM cannot start before the first software picture');
+  const picture = (time, epoch = player.epoch) => player.receive({ type: 'video', epoch, time, duration: .04,
+    frame: { close() {} } });
+  picture(0);
+  assert.equal(player.videoBlocked, false);
+  assert.equal(messages.at(-1).type, 'play');
+  player.time = .16; player.render();
+  assert.equal(player.videoBlocked, true);
+  assert.equal(messages.at(-1).type, 'pause', 'Slow video holds the audio clock instead of losing sync');
+  picture(.12);
+  assert.equal(player.videoBlocked, false);
+  assert.equal(messages.at(-1).type, 'play');
+  player.pause();
+  const count = messages.length;
+  picture(.16);
+  assert.equal(messages.length, count, 'A late picture never resumes user-paused audio');
+  await player.play();
+  await player.seek(1);
+  assert.equal(player.videoBlocked, true);
+  assert.notEqual(messages.at(-1).type, 'play');
+  picture(.9, 0);
+  assert.equal(player.videoBlocked, true, 'Stale seek pictures cannot resume PCM');
+  picture(1);
+  assert.equal(player.videoBlocked, false);
+  assert.equal(messages.at(-1).epoch, 1);
+  assert.equal(messages.at(-1).type, 'play');
+});
+
 test('video-only clock supports delayed startup, pause, seek, EOF and replay without PCM', async () => {
   const bundle = buildSync({ entryPoints: [path.join(__dirname, '../src/stream-player.js')],
     bundle: true, platform: 'node', format: 'cjs', write: false }).outputFiles[0].text;
