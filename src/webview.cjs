@@ -11,7 +11,7 @@ function meterGroup(title, unit, kind, columns) {
   return `<section class="meter-group ${kind}" aria-label="${title}"><h3 title="${title} (${unit})">${title}<span>${unit}</span></h3><div class="meter-columns">
     <div class="meter-axis" aria-hidden="true">${[0, -12, -24, -48, -72].map(db => `<span data-db="${db}">${db}</span>`).join('')}</div>${columns}</div></section>`;
 }
-function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, monitor, view, nonce, source, worker, worklet, decoder, pcm, stream, hostMedia = false, preferences, bootstrap, extraStyle, plugins = [] }) {
+function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, monitor, view, nonce, source, worker, worklet, decoder, pcm, stream, hostMedia = false, mediaSession = false, preferences, bootstrap, extraStyle, plugins = [] }) {
   return `<!doctype html><html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; img-src ${cspSource} data:; media-src ${cspSource}; connect-src ${cspSource}; worker-src blob:; style-src ${cspSource} blob:; script-src ${cspSource} blob: 'wasm-unsafe-eval'${nonce ? ` 'nonce-${nonce}'` : ''};">
@@ -23,7 +23,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
 <main id="player-layout">
   <div class="viewport">
     <div id="stage">
-      <canvas id="video" data-title="${escape(title)}" data-defaults="${escape(JSON.stringify(defaults))}" data-preferences="${escape(JSON.stringify(normalize(preferences)))}" data-plugins="${escape(JSON.stringify(plugins))}" data-host="${hostMedia ? '1' : '0'}" data-source="${escape(source || '')}" data-decoder="${escape(decoder || '')}" data-pcm="${escape(pcm || '')}" data-worker="${escape(worker || '')}" data-worklet="${escape(worklet || '')}" data-view="${escape(view || '')}" aria-label="Panorama video"></canvas>
+      <canvas id="video" data-title="${escape(title)}" data-defaults="${escape(JSON.stringify(defaults))}" data-preferences="${escape(JSON.stringify(normalize(preferences)))}" data-plugins="${escape(JSON.stringify(plugins))}" data-host="${hostMedia ? '1' : '0'}" data-session="${mediaSession ? '1' : '0'}" data-source="${escape(source || '')}" data-decoder="${escape(decoder || '')}" data-pcm="${escape(pcm || '')}" data-worker="${escape(worker || '')}" data-worklet="${escape(worklet || '')}" data-view="${escape(view || '')}" aria-label="Panorama video"></canvas>
       <canvas id="projected" aria-label="Single-eye panorama" hidden></canvas>
       <canvas id="overlay" width="140" height="70" aria-label="FOA direction heatmap"></canvas>
       <div id="audio-poster" hidden><i data-lucide="audio-lines" aria-hidden="true"></i><span id="audio-format"></span></div>

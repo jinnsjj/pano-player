@@ -1,4 +1,4 @@
-.plugin-panel-content:has(#annotation-open) { min-width: 0; }
+.plugin-panel-content:has(#annotation-file) { min-width: 0; }
 #annotation-open, #annotation-clear { width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 4px; }
 #annotation-name { min-width: 0; max-width: min(280px, 100% - 80px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 #annotation-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }

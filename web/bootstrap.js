@@ -24,16 +24,13 @@ import { validateFile } from './host.js';
     file,
     getPlugins: () => host.getPlugins(),
     onPluginsChanged: callback => host.onPluginsChanged(callback),
+    openFiles: files => host.openFiles(files),
     setState() {},
     postMessage(message) {
       if (message.type === 'preferences') host.preferences.save(message.patch);
       if (message.type === 'diagnostic') console.debug('PanoPlayer:', message.text);
       if (message.type === 'select-audio') audioFile.click();
     },
-  });
-  window.addEventListener('dragover', event => event.preventDefault());
-  window.addEventListener('drop', event => {
-    event.preventDefault(); host.openFiles(event.dataTransfer.files);
   });
   window.addEventListener('error', event => host.report(`Player error: ${event.message}`));
   const narrow = matchMedia('(max-width: 560px)');

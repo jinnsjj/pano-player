@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { parseMediaPath, openEditorMedia } = require('../src/editor-media.cjs');
+const { parseMediaPath, openEditorMedia, mediaEditorType } = require('../src/editor-media.cjs');
 
 test('media paths preserve spaces and special characters and accept optional wrapping', () => {
   for (const wrap of ['', '"', "'", '`']) {
@@ -11,6 +11,8 @@ test('media paths preserve spaces and special characters and accept optional wra
   }
   assert.equal(parseMediaPath('C:\\Media\\a b.mp4', path.win32), 'C:\\Media\\a b.mp4');
   assert.equal(parseMediaPath('/media/\u4e2d\u6587.wav'), '/media/\u4e2d\u6587.wav');
+  assert.equal(parseMediaPath('/media/session.JSON'), '/media/session.JSON');
+  for (const ext of ['jsonpp', 'JSONPP']) assert.equal(parseMediaPath('/media/session.' + ext), '/media/session.' + ext);
   assert.equal(parseMediaPath('\\\\nas\\share\\a.flac', path.win32), '\\\\nas\\share\\a.flac');
   for (const invalid of ['', 'clip.mp4', '~/clip.mp4', 'https://host/a.mp4', 'sftp://host/a.wav',
     '/a.txt', '/a.mp4\n/b.mp4', '/a\0.mp4']) {
@@ -74,4 +76,9 @@ test('manifest contributes a text editor context command with automatic command 
   const manifest = require('../package.json');
   assert.ok(manifest.contributes.commands.some(command => command.command === 'panoPlayer.openPath'));
   assert.ok(manifest.contributes.menus['editor/context'].some(item => item.command === 'panoPlayer.openPath'));
+});
+
+test('JSONPP paths use the dedicated default player editor without changing JSON and media editor IDs', () => {
+  for (const file of ['/media/session.jsonpp', '/media/session.JSONPP']) assert.equal(mediaEditorType(file), 'panoPlayer.mediaConfig');
+  for (const file of ['/media/session.json', '/media/video.mp4', '/media/audio.wav']) assert.equal(mediaEditorType(file), 'panoPlayer.player');
 });

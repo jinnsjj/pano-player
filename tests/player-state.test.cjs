@@ -2,19 +2,20 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const { buildSync } = require('esbuild');
+const { webcrypto: crypto } = require('node:crypto');
 const { defaults, normalize } = require('../src/preferences.cjs');
 const routingModule = { exports: {} };
 vm.runInNewContext(buildSync({ entryPoints: [require.resolve('../media/channel-routing.js')], bundle: true,
   write: false, format: 'cjs' }).outputFiles[0].text, { module: routingModule, exports: routingModule.exports });
 const { createRouting, copyRouting, validRouting } = routingModule.exports;
-function setup(saved = {}) {
+function setup(saved = {}, { audioSources = {}, mediaSession = false, primaryReady = true } = {}) {
   let persisted, onMap, onError, frame;
-  const elements = new Map(), messages = [], listeners = {};
+  const elements = new Map(), messages = [], listeners = {}, sourceSessions = [];
   const get = id => {
     if (!elements.has(id)) elements.set(id, {
       value: '.75', checked: true, disabled: false, paused: true, currentTime: 0, duration: 10, readyState: 4,
       audioTracks: [], selectedOptions: [], replaceChildren(...options) { this.options = options; },
-      videoWidth: 960, videoHeight: 480, dataset: { defaults: JSON.stringify(defaults), preferences: JSON.stringify(normalize(saved)) }, style: { setProperty(k, v) { this[k] = v; } },
+      videoWidth: 960, videoHeight: 480, dataset: { defaults: JSON.stringify(defaults), preferences: JSON.stringify(normalize(saved)), session: mediaSession ? '1' : '0' }, style: { setProperty(k, v) { this[k] = v; } },
       listeners: {}, addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
       fire(type, event = {}) { for (const fn of this.listeners[type] || []) fn(event); },
       width: 2048, height: 1024, clientHeight: 800,
@@ -28,7 +29,8 @@ function setup(saved = {}) {
       getBoundingClientRect() { return { x: 100, y: 76, top: 76, bottom: 224, right: 340, width: 240, height: 148 }; },
       pause() { this.paused = true; }, play() { this.paused = false; return Promise.resolve(); },
       async seek(time) { this.currentTime = time; this.fire('seeking'); },
-      useAudioSession(session) { this.audioTrackIndex = session.audioTrackIndex; this.channels = session.channels; this.fire('loadedmetadata'); },
+      useAudioSession(session) { this.audioTrackIndex = session.audioTrackIndex; this.audioTracks = session.audioTracks; this.channels = session.channels; this.fire('loadedmetadata'); },
+      dispose() { this.disposed = true; },
     });
     return elements.get(id);
   };
@@ -36,15 +38,20 @@ function setup(saved = {}) {
   window.StreamPlayer = class {
     constructor(element, options) {
       if (!options.audioOnly) return element;
-      return { dataset: element.dataset, audioTrackIndex: options.audioTrackIndex, channels: 4,
+      const choice = audioSources[element.dataset.source];
+      const session = { dataset: element.dataset, audioTrackIndex: options.audioTrackIndex ?? 0, channels: choice?.channels ?? 4,
+        audioTracks: choice?.tracks ?? get('video').audioTracks,
+        metadata: choice?.error ? Promise.reject(new Error(choice.error)) : choice?.metadata ?? Promise.resolve(),
+        prepareError: choice?.switchError,
         time: options.time, duration: 10, endFrame: (options.time + 2) * 48000, sampleRate: 48000,
-        alignAudio() {}, async play() {}, dispose() {} };
+        alignAudio() {}, async play() {}, dispose() { this.disposed = true; } };
+      sourceSessions.push({ session, options }); return session;
     }
   };
   window.FoaMonitor = class {
     generation = 0; ready = false;
     constructor(video, error, map) { this.video = video; onError = error; onMap = map; }
-    prepare() { return this.video === get('video') ? new Promise(() => {}) : Promise.resolve(); }
+    prepare() { return this.video === get('video') ? new Promise(() => {}) : this.video.prepareError ? Promise.reject(new Error(this.video.prepareError)) : Promise.resolve(); }
     resume() { return this.prepare(); }
     reset() { this.generation++; }
     setOrder(order) { this.order = order; this.reset(); }
@@ -77,16 +84,20 @@ function setup(saved = {}) {
     configure(projection, layout, rotation) { get('projected').configuration = { projection, layout, rotation }; }
     render() { return false; } dispose() {}
   };
+  if (!primaryReady) { get('video').readyState = 0; get('video').metadata = Promise.resolve(); }
   vm.runInNewContext(buildSync({ entryPoints: [require.resolve('../media/player.js')], bundle: true, write: false }).outputFiles[0].text, {
-    window, document: { getElementById: get, createElement: () => ({ dataset: {} }) }, performance, AbortController,
-    setTimeout, clearTimeout, DOMException,
+    window, document: { getElementById: get, createElement: () => ({ dataset: {} }) }, performance, AbortController, crypto,
+    setTimeout, clearTimeout, DOMException, File,
     ResizeObserver: class { observe() {} disconnect() {} },
     getComputedStyle: element => ({ paddingLeft: '24', paddingRight: '24', getPropertyValue: key => element.style?.[key] || '2' }),
     Option: class { constructor(text, value) { this.textContent = text; this.value = value; } },
     acquireVsCodeApi: () => ({ getState: () => saved, setState(value) { persisted = value; }, postMessage: m => messages.push(m) }),
     lucide: { createIcons() {} }, requestAnimationFrame(fn) { frame = fn; }, Uint8ClampedArray, ImageData: class {},
   });
-  return { get, messages, onMap, onError, tick: now => frame(now), monitor: window.__PANO_PLAYER__.monitor,
+  return { get, messages, onMap, onError, sourceSessions,
+    message: data => listeners.message({ data: { session: messages.find(message => message.type === 'player-ready')?.session, ...data } }),
+    dispose: () => window.__PANO_PLAYER__.dispose(),
+    tick: now => frame(now), monitor: window.__PANO_PLAYER__.monitor,
     persisted: () => persisted, state: () => window.__PANO_PLAYER__.getState() };
 }
 test('information footer follows the active audio codec without replacing the video codec', () => {
@@ -201,6 +212,106 @@ test('one audio selector combines source and track safely without persisting sel
   await s.get('audio-track').listeners.change[0]();
   assert.equal(video.audioTrackIndex, 1); assert.equal(s.get('audio-track').disabled, false);
   assert.equal(s.messages.some(message => message.type === 'preferences'), false);
+});
+const externalSources = [
+  { id: 'first', name: 'first.wav', url: 'pano-audio:first' },
+  { id: 'second', name: 'second.wav', url: 'pano-audio:second' },
+];
+const externalTrack = (index = 0) => ({ index, channels: 4, codec: 'pcm', supported: true });
+const flushSession = async () => { for (let i = 0; i < 5; i++) await new Promise(setImmediate); };
+const setupSession = options => setup({}, { ...options, mediaSession: true });
+
+test('JSON audio sources populate every track while retaining video audio by default', async () => {
+  const s = setupSession({ audioSources: {
+    'pano-audio:first': { tracks: [externalTrack(), externalTrack(1)] },
+    'pano-audio:second': { tracks: [externalTrack()] },
+  } });
+  const video = s.get('video'); video.audioTracks = [externalTrack()]; video.audioTrackIndex = 0;
+  video.fire('loadedmetadata'); video.fire('canplay'); video.currentTime = 3;
+  s.message({ type: 'media-session', sources: externalSources }); await flushSession();
+  assert.equal(s.state().audioSource, 'primary'); assert.equal(video.currentTime, 3); assert.equal(video.paused, true);
+  assert.equal(s.get('audio-track').options.length, 4);
+  assert.match(s.get('audio-track').options[1].textContent, /first.wav/);
+  assert.match(s.get('audio-track').options[3].textContent, /second.wav/);
+  assert.equal(s.sourceSessions.length, 2); assert.ok(s.sourceSessions.every(({ session, options }) => session.disposed && options.deferEnvelope));
+  s.message({ type: 'media-session', sources: externalSources }); await flushSession(); assert.equal(s.sourceSessions.length, 2);
+  s.get('audio-track').value = '["second",0]'; await s.get('audio-track').listeners.change[0]();
+  assert.equal(s.state().audioSource, 'second'); assert.equal(video.currentTime, 3);
+  assert.equal(s.messages.some(message => message.type === 'preferences'), false);
+  s.dispose();
+});
+
+test('silent video selects the first usable external file in JSON order, skipping failed files', async () => {
+  const s = setupSession({ audioSources: {
+    'pano-audio:first': { error: 'Cannot read first file.' },
+    'pano-audio:second': { tracks: [externalTrack()] },
+  } });
+  s.get('video').fire('loadedmetadata'); s.get('video').fire('canplay');
+  s.message({ type: 'media-session', sources: externalSources }); await flushSession();
+  assert.equal(s.state().audioSource, 'second'); assert.equal(s.get('video').paused, true);
+  const failed = s.get('audio-track').options.find(option => option.textContent.includes('first.wav'));
+  assert.equal(failed.disabled, true); assert.match(failed.title, /Cannot read first file/);
+  assert.equal(s.get('empty').hidden, true); s.dispose();
+});
+
+test('silent-video fallback waits for the first video frame and preserves JSON source order', async () => {
+  let release;
+  const s = setupSession({ primaryReady: false, audioSources: {
+    'pano-audio:first': { tracks: [externalTrack()], metadata: new Promise(resolve => { release = resolve; }) },
+    'pano-audio:second': { tracks: [externalTrack()] },
+  } });
+  s.message({ type: 'media-session', sources: externalSources }); await flushSession();
+  assert.equal(s.state().audioSource, 'primary', 'A faster second file cannot take precedence over the first');
+  release(); await flushSession();
+  assert.equal(s.state().audioSource, 'primary', 'A metadata probe cannot replace the first video canplay event');
+  s.get('video').fire('loadedmetadata'); s.get('video').fire('canplay'); await flushSession();
+  assert.equal(s.state().ready, true); assert.equal(s.state().audioSource, 'first'); s.dispose();
+});
+
+test('silent-video fallback continues after a decoder failure without overriding a manual selection', async () => {
+  const s = setupSession({ audioSources: {
+    'pano-audio:first': { tracks: [externalTrack()], switchError: 'Unsupported audio decoder.' },
+    'pano-audio:second': { tracks: [externalTrack()] },
+  } });
+  s.message({ type: 'media-session', sources: externalSources }); await flushSession();
+  assert.equal(s.state().audioSource, 'second'); assert.equal(s.state().paused, true); s.dispose();
+});
+
+test('stale JSON session responses are ignored and an empty configuration leaves silent video unchanged', async () => {
+  const s = setupSession();
+  s.message({ type: 'media-session', session: 'stale', sources: externalSources });
+  s.message({ type: 'session-annotation', session: 'stale', error: 'Stale failure.' }); await flushSession();
+  assert.equal(s.sourceSessions.length, 0); assert.equal(s.get('plugin-status').textContent, undefined);
+  s.message({ type: 'media-session', sources: [] }); await flushSession();
+  assert.equal(s.state().audioSource, 'primary'); assert.equal(s.state().switchingTrack, false); s.dispose();
+});
+
+test('JSON loading cannot override a manual audio selection and cancels metadata probes on close', async () => {
+  let release;
+  const s = setupSession({ audioSources: {
+    'pano-audio:first': { tracks: [externalTrack()], metadata: new Promise(resolve => { release = resolve; }) },
+    'pano-audio:second': { tracks: [externalTrack()] },
+  } });
+  s.get('video').fire('loadedmetadata'); s.get('video').fire('canplay');
+  s.message({ type: 'media-session', sources: externalSources }); await flushSession();
+  s.get('audio-track').value = '["second",0]'; await s.get('audio-track').listeners.change[0]();
+  release(); await flushSession(); assert.equal(s.state().audioSource, 'second'); s.dispose();
+  const closing = setupSession({ audioSources: {
+    'pano-audio:first': { tracks: [externalTrack()], metadata: new Promise(() => {}) },
+    'pano-audio:second': { tracks: [externalTrack()], metadata: new Promise(() => {}) },
+  } });
+  closing.message({ type: 'media-session', sources: externalSources }); closing.dispose(); await flushSession();
+  assert.ok(closing.sourceSessions.every(({ session }) => session.disposed));
+  assert.equal(closing.state().audioSource, 'primary');
+});
+
+test('optional annotation failures are visible without interrupting media', async () => {
+  const s = setupSession();
+  s.message({ type: 'session-annotation', error: 'Missing annotation JSON.' }); await flushSession();
+  assert.match(s.get('plugin-status').textContent, /Annotation unavailable.*Missing annotation JSON/);
+  s.message({ type: 'session-annotation', file: { name: 'labels.json', text: '{}' } }); await flushSession();
+  assert.match(s.get('plugin-status').textContent, /No enabled plugin accepts/);
+  assert.equal(s.state().audioSource, 'primary'); assert.equal(s.get('video').paused, true); s.dispose();
 });
 test('meter overlay independently persists, closes, resets, and displays held peaks separately from RMS', () => {
   const s = setup();

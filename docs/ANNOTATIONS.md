@@ -5,14 +5,28 @@ in `plugins/annotations/` and uses the same plugin API as optional extensions.
 It is included and enabled by default in both VS Code and the standalone web
 player; no separate installation is required.
 
-Open a video, expand **Overlay > Annotation**, then choose **Open annotation JSON**.
-Collapsing the module hides its controls without hiding the canvas annotations.
+Open a video, then drop a single annotation `.json` file onto the player, or
+click the **Open annotation JSON** folder button beside the Annotation visibility
+checkbox and settings arrow in the Overlay row. The folder button remains
+available when Annotation settings are collapsed.
+In VS Code, this command opens the native extension-host file dialog in the
+current media directory. With Remote SSH, both the dialog and file reads use
+paths on the remote workspace host, not the client machine. The standalone web
+player uses the browser file chooser. Canceling selection or a failed import
+leaves the current annotations and playback unchanged.
+Dropping annotations preserves the current media, playback position and play/pause state.
+VS Code also accepts URI-only drops from its file tree. These files are read by
+the extension host without changing the webview's resource roots. Only local
+files or files on the currently opened media's remote host are accepted, with
+the same 20 MiB limit and annotation validation as direct file imports.
+Collapsing settings hides the secondary controls without hiding the canvas
+annotations or the folder-open button.
 The expandable **JSON format** reference includes valid bbox/point examples,
 required fields, interval semantics, source-frame coordinates and file limits.
 In the web player, **Plugins** can disable or re-enable the bundled module.
-Files are read
-locally in the browser or webview; no upload is performed. Each media session
-owns one annotation file. Opening another media file clears its annotations.
+Files are read by the browser in the web player or by the extension host in
+VS Code; no annotation data is uploaded to an external service. Each media
+session owns one annotation file. Opening another media file clears its annotations.
 The Annotation checkbox in the Overlay row controls visibility independently of
 the settings arrow. It becomes available after importing a valid file; hiding
 annotations preserves that file and its filters. Labels controls captions; source checkboxes filter

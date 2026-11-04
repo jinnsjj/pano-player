@@ -7,6 +7,9 @@
 !src/extension.cjs
 !src/webview.cjs
 !src/host-file.cjs
+!src/dropped-json.cjs
+!src/media-manifest.cjs
+!docs/MEDIA-JSON.md
 !src/preferences.cjs
 !src/editor-media.cjs
 !src/plugin-registry.cjs
@@ -30,7 +33,9 @@
 !media/channel-routing.js
 !media/codec-info.js
 !media/direction-grid.js
+!media/drop-resources.js
 !media/envelope.js
+!media/file-drop.js
 !media/floating-overlay.js
 !media/foa-capture-processor.js
 !media/icon.png

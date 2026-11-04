@@ -2,7 +2,7 @@
   "name": "pano-player",
   "displayName": "PanoPlayer",
   "description": "Play ERP and EAC panoramas, mono or stereo video, with spatial FOA audio and live PowerMap overlays.",
-  "version": "0.4.38",
+  "version": "0.4.42",
   "icon": "media/icon.png",
   "publisher": "shijunjie",
   "author": "Junjie Shi",
@@ -40,7 +40,8 @@
     "virtualWorkspaces": false
   },
   "activationEvents": [
-    "onCustomEditor:panoPlayer.player"
+    "onCustomEditor:panoPlayer.player",
+    "onCustomEditor:panoPlayer.mediaConfig"
   ],
   "scripts": {
     "build": "node build.cjs",
@@ -53,6 +54,12 @@
     "package": "npx @vscode/vsce package --no-dependencies --githubBranch main --out output"
   },
   "contributes": {
+    "languages": [
+      {
+        "id": "json",
+        "extensions": [".jsonpp"]
+      }
+    ],
     "commands": [
       {
         "command": "panoPlayer.open",
@@ -98,9 +105,28 @@
           },
           {
             "filenamePattern": "*.MKV"
+          },
+          {
+            "filenamePattern": "*.json"
+          },
+          {
+            "filenamePattern": "*.JSON"
           }
         ],
         "priority": "option"
+      },
+      {
+        "viewType": "panoPlayer.mediaConfig",
+        "displayName": "PanoPlayer",
+        "selector": [
+          {
+            "filenamePattern": "*.jsonpp"
+          },
+          {
+            "filenamePattern": "*.JSONPP"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "menus": {
@@ -114,7 +140,7 @@
       "explorer/context": [
         {
           "command": "panoPlayer.open",
-          "when": "(resourceScheme == file || resourceScheme == vscode-remote) && resourceExtname =~ /\\.(mp4|webm|wav|flac|mov|mkv)$/i",
+          "when": "(resourceScheme == file || resourceScheme == vscode-remote) && resourceExtname =~ /\\.(mp4|webm|wav|flac|mov|mkv|json|jsonpp)$/i",
           "group": "navigation"
         }
       ]

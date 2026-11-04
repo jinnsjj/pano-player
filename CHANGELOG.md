@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.4.42 - 2026-11-04
+
+### Added
+
+- Open `.jsonpp` media configurations in PanoPlayer by default, including in Remote workspaces, while keeping ordinary `.json` files in the text editor by default.
+- Recognize JSONPP configurations in the Open Media picker, explorer menu and selected-path command, with the same paths, audio and annotation format as JSON configurations.
+
+## 0.4.41 - 2026-11-04
+
+### Added
+
+- Open JSON media configurations with a video path, multiple optional external audio paths and an optional annotation JSON path, including on VS Code Remote hosts.
+- Accept `audio_path` as either a single path string or an array of paths.
+- Resolve relative references beside the configuration and add every external audio track without replacing the video's audio by default. Silent videos select the first usable external file; manual selection takes precedence.
+- Load annotations after plugin activation and isolate optional file failures from video playback. See `docs/MEDIA-JSON.md` for the version 1 format.
+
+## 0.4.40 - 2026-11-03
+
+### Fixed
+
+- Keep the Open annotation JSON folder button beside the Annotation visibility checkbox and settings arrow, available even when settings are collapsed.
+- Open annotation JSON through VS Code's native extension-host file dialog, starting in the current media directory and using remote host paths for Remote SSH sessions.
+- Preserve the current annotations and playback when file selection is canceled or reading fails. The standalone web player continues to use the browser file chooser.
+
+## 0.4.39 - 2026-11-03
+
+### Added
+
+- Drag one annotation JSON file onto the playback interface in the web player or VS Code to import it and reveal Annotation settings without replacing media or changing playback position or play/pause state.
+- Accept URI-only annotation drops in VS Code by reading files on the extension host, limited to 20 MiB and local files or the current remote host.
+
+### Fixed
+
+- Keep the previous annotations and playback intact when a dropped JSON file is invalid, empty or oversized, and show validation errors in the expanded Annotation settings.
+
 ## 0.4.38 - 2026-11-03
 
 ### Added

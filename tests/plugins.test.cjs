@@ -139,7 +139,7 @@ function setup(load) {
   const { PlayerPlugins } = moduleFor('../media/plugins.js', globals);
   const runtime = new PlayerPlugins({ getState: () => ({ ...state }), getView: () => view, stage, panels, overlays,
     projectionUrl: 'http://localhost/media/view.js', icons() {}, onError: text => errors.push(text), load });
-  return { runtime, stage, panels, overlays, overlayToolbar, head, view, layers, errors, projections, state,
+  return { runtime, stage, panels, overlays, overlayToolbar, head, view, layers, errors, projections, state, element,
     frame(patch = {}) { state = { ...state, ...patch }; runtime.frame(); } };
 }
 const flush = () => new Promise(setImmediate);
@@ -174,6 +174,87 @@ test('an overlay plugin supplies its own visibility checkbox independently of th
   assert.equal(body.hidden, true); assert.equal(s.overlayToolbar.children.length, 0);
 });
 
+test('owned overlay toolbar actions remain outside the collapsed panel and independent of its toggle and disclosure', async () => {
+  let body, toggle, action, clicks = 0;
+  const s = setup(async () => ({ activate(api) {
+    toggle = { type: 'checkbox', checked: false };
+    action = s.element('button'); action.setAttribute('aria-label', 'Open data JSON');
+    action.addEventListener('click', () => { clicks++; });
+    body = api.createPanel({ title: 'Custom overlay', placement: 'overlay', toggle, actions: [action] });
+  } }));
+  s.runtime.sync([sample()]); await flush();
+  const group = s.overlayToolbar.children[0], arrow = group.children[2];
+  assert.equal(group.children[0].children[0], toggle);
+  assert.equal(group.children[1], action); assert.equal(action.parent, group);
+  assert.equal(body.children.includes(action), false); assert.equal(body.hidden, true);
+  assert.equal(Boolean(group.hidden || action.hidden), false);
+  action.click();
+  assert.equal(clicks, 1); assert.equal(toggle.checked, false); assert.equal(body.hidden, true);
+  assert.equal(arrow.getAttribute('aria-expanded'), 'false');
+  arrow.click();
+  assert.equal(body.hidden, false); assert.equal(arrow.getAttribute('aria-expanded'), 'true');
+  toggle.checked = true; action.click();
+  assert.equal(clicks, 2); assert.equal(toggle.checked, true); assert.equal(body.hidden, false);
+  arrow.click();
+  assert.equal(body.hidden, true); assert.equal(toggle.checked, true); assert.equal(group.children[1], action);
+  s.runtime.sync([]);
+  assert.equal(s.overlayToolbar.children.length, 0, 'Unloading removes the toolbar group and its action');
+  assert.equal(s.overlays.children.length, 0);
+  s.runtime.dispose();
+});
+
+test('toolbar actions must be button arrays and are rejected for settings panels', async () => {
+  let api;
+  const s = setup(async () => ({ activate(value) { api = value; } }));
+  s.runtime.sync([sample()]); await flush();
+  for (const actions of [null, {}, [null], [s.element('div')], [{ tagName: 'button' }]]) {
+    assert.throws(() => api.createPanel({ title: 'Invalid actions', placement: 'overlay', actions }), /actions.*button/i);
+  }
+  assert.throws(() => api.createPanel({ title: 'Settings actions', actions: [s.element('button')] }), /actions.*button/i);
+  assert.equal(s.panels.children.length, 0); assert.equal(s.overlays.children.length, 0);
+  assert.equal(s.overlayToolbar.children.length, 0);
+  assert.equal(s.runtime.snapshot()[0].status, 'active');
+  s.runtime.dispose();
+});
+
+test('showPanel reveals an owned overlay disclosure idempotently without changing its visibility toggle', async () => {
+  let api, body, toggle;
+  const s = setup(async () => ({ activate(value) {
+    api = value; toggle = { type: 'checkbox', checked: false };
+    body = api.createPanel({ title: 'Example', placement: 'overlay', toggle });
+  } }));
+  s.runtime.sync([sample()]); await flush();
+  const button = s.overlayToolbar.children[0].children[1];
+  assert.equal(body.hidden, true); assert.equal(button.getAttribute('aria-expanded'), 'false');
+  api.showPanel(body);
+  assert.equal(body.hidden, false); assert.equal(button.getAttribute('aria-expanded'), 'true');
+  assert.equal(toggle.checked, false, 'Revealing settings does not enable the overlay');
+  api.showPanel(body);
+  assert.equal(body.hidden, false); assert.equal(button.getAttribute('aria-expanded'), 'true');
+  button.click(); toggle.checked = true;
+  api.showPanel(body);
+  assert.equal(body.hidden, false); assert.equal(toggle.checked, true);
+  s.runtime.dispose();
+});
+
+test('showPanel rejects foreign and non-overlay panels and does nothing after the plugin unloads', async () => {
+  const apis = {}, bodies = {};
+  let settings;
+  const s = setup(async url => ({ activate(api) {
+    apis[url] = api; bodies[url] = api.createPanel({ title: url, placement: 'overlay' });
+    if (url === 'first') settings = api.createPanel({ title: 'Settings' });
+  } }));
+  s.runtime.sync(['first', 'second'].map(id => ({ ...sample({ id: 'test.' + id }), code: undefined, script: id })));
+  await flush();
+  assert.throws(() => apis.first.showPanel(bodies.second), /owned|overlay/);
+  assert.throws(() => apis.first.showPanel(settings), /owned|overlay/);
+  assert.equal(bodies.first.hidden, true); assert.equal(bodies.second.hidden, true);
+  s.runtime.sync([]);
+  assert.doesNotThrow(() => apis.first.showPanel(bodies.first));
+  assert.equal(bodies.first.hidden, true);
+  s.runtime.dispose();
+});
+
 test('generic plugin interface owns panels, frames and source-aligned layers without exposing player internals', async () => {
   let api, frames = 0, disposed = 0, layer;
   const s = setup(async () => ({ activate(value) {
@@ -185,6 +266,7 @@ test('generic plugin interface owns panels, frames and source-aligned layers wit
   assert.equal(s.panels.children.length, 1); assert.equal(s.stage.children.length, 1);
   assert.equal(s.runtime.snapshot()[0].status, 'active'); assert.ok(frames > 0);
   assert.equal(api.video, undefined); assert.equal(api.view, undefined);
+  assert.equal(api.selectJsonFile, undefined, 'Browser runtimes do not advertise a host picker');
   assert.equal(api.getState().time, 0);
   assert.equal(Object.isFrozen(api.getState()), true);
   const output = s.layers.get('test.example:0').canvas;
@@ -196,6 +278,108 @@ test('generic plugin interface owns panels, frames and source-aligned layers wit
   s.frame({ viewMode: 'spatial' }); assert.equal(output.hidden, true);
   s.runtime.sync([]); assert.equal(s.panels.children.length, 0); assert.equal(s.stage.children.length, 0);
   assert.equal(s.layers.size, 0); assert.equal(disposed, 1); assert.equal(s.projections[0].disposed, true);
+  s.runtime.dispose(); assert.equal(disposed, 1);
+});
+
+test('the optional host JSON picker is forwarded without exposing host APIs and rejects calls after unload', async () => {
+  let api;
+  const s = setup(async () => ({ activate(value) { api = value; } }));
+  const file = { name: 'host.json' }; let calls = 0;
+  s.runtime.selectJsonFile = async () => { calls++; return file; };
+  s.runtime.sync([sample()]); await flush();
+  assert.equal(await api.selectJsonFile(), file); assert.equal(calls, 1);
+  assert.equal(api.postMessage, undefined); assert.equal(api.host, undefined);
+  s.runtime.sync([]); await assert.rejects(api.selectJsonFile(), /session closed/);
+  assert.equal(calls, 1); s.runtime.dispose();
+});
+
+test('file drops route arrays through active plugin handlers in order and stop at the first claim', async () => {
+  const calls = [], file = { name: 'labels.json' };
+  let received;
+  const s = setup(async url => ({ activate(api) {
+    api.onFileDrop(files => { received = files; calls.push(url + ':first'); return false; });
+    api.onFileDrop(files => { calls.push(url + ':second'); return files[0]?.name.endsWith('.json'); });
+    api.onFileDrop(() => { calls.push(url + ':third'); return true; });
+  } }));
+  s.runtime.sync(['first', 'second'].map(id => ({ ...sample({ id: 'test.' + id }), code: undefined, script: id })));
+  await flush();
+  assert.equal(s.runtime.dropFiles({ 0: file, length: 1 }), true);
+  assert.equal(Array.isArray(received), true);
+  assert.deepEqual(Array.from(received), [file]);
+  assert.deepEqual(calls, ['first:first', 'first:second']);
+  s.runtime.dispose();
+});
+
+test('only a synchronous true claims a drop and unmatched media remains available to the host', async () => {
+  const calls = [];
+  const s = setup(async () => ({ activate(api) {
+    for (const [name, result] of [['undefined', undefined], ['truthy', 1], ['promise', Promise.resolve(true)], ['false', false]]) {
+      api.onFileDrop(() => { calls.push(name); return result; });
+    }
+    api.onFileDrop(files => { calls.push('json'); return files.length === 1 && files[0].name.endsWith('.json'); });
+  } }));
+  s.runtime.sync([sample()]); await flush();
+  assert.equal(s.runtime.dropFiles([{ name: 'movie.mp4' }]), false);
+  assert.deepEqual(calls, ['undefined', 'truthy', 'promise', 'false', 'json']);
+  calls.length = 0;
+  assert.equal(s.runtime.dropFiles([{ name: 'labels.json' }]), true);
+  assert.deepEqual(calls, ['undefined', 'truthy', 'promise', 'false', 'json']);
+  s.runtime.dispose();
+});
+
+test('file drop subscriptions validate callbacks and release on unsubscribe, unload and runtime disposal', async () => {
+  let api, subscription, calls = 0;
+  const s = setup(async () => ({ activate(value) {
+    api = value; subscription = api.onFileDrop(() => { calls++; return true; });
+  } }));
+  s.runtime.sync([sample()]); await flush();
+  for (const callback of [undefined, null, 1, {}]) assert.throws(() => api.onFileDrop(callback), /function/);
+  assert.equal(s.runtime.dropFiles([{ name: 'labels.json' }]), true); assert.equal(calls, 1);
+  subscription.dispose(); subscription.dispose();
+  assert.equal(s.runtime.dropFiles([{ name: 'labels.json' }]), false); assert.equal(calls, 1);
+  api.onFileDrop(() => { calls++; return true; });
+  s.runtime.sync([]);
+  assert.equal(s.runtime.dropFiles([{ name: 'labels.json' }]), false); assert.equal(calls, 1);
+  s.runtime.sync([sample()]); await flush();
+  assert.equal(s.runtime.dropFiles([{ name: 'labels.json' }]), true); assert.equal(calls, 2);
+  s.runtime.dispose();
+  assert.equal(s.runtime.dropFiles([{ name: 'labels.json' }]), false); assert.equal(calls, 2);
+});
+
+test('file handlers registered during asynchronous activation cannot consume drops before activation', async () => {
+  let resolve, calls = 0;
+  const s = setup(async () => ({ activate(api) {
+    api.onFileDrop(() => { calls++; return true; });
+    return new Promise(r => { resolve = r; });
+  } }));
+  s.runtime.sync([sample()]); await flush();
+  assert.equal(s.runtime.dropFiles([{ name: 'labels.json' }]), false); assert.equal(calls, 0);
+  resolve({}); await flush();
+  assert.equal(s.runtime.dropFiles([{ name: 'labels.json' }]), true); assert.equal(calls, 1);
+  s.runtime.dispose();
+});
+
+test('a throwing file handler releases its plugin and continues routing to healthy handlers', async () => {
+  let brokenCalls = 0, healthyCalls = 0, disposed = 0;
+  const s = setup(async url => ({ activate(api) {
+    api.createPanel({ title: url }); api.createLayer();
+    api.onFileDrop(() => {
+      if (url === 'broken') { brokenCalls++; throw new Error('drop failure'); }
+      healthyCalls++; return true;
+    });
+    if (url === 'broken') api.onFileDrop(() => { brokenCalls++; return true; });
+    return { dispose() { if (url === 'broken') disposed++; } };
+  } }));
+  s.runtime.sync(['broken', 'healthy'].map(id => ({ ...sample({ id: 'test.' + id }), code: undefined, script: id })));
+  await flush();
+  assert.equal(s.runtime.dropFiles([{ name: 'labels.json' }]), true);
+  assert.equal(brokenCalls, 1); assert.equal(healthyCalls, 1); assert.equal(disposed, 1);
+  assert.equal(s.runtime.snapshot().find(p => p.id === 'test.broken').status, 'error');
+  assert.equal(s.runtime.snapshot().find(p => p.id === 'test.healthy').status, 'active');
+  assert.equal(s.panels.children.length, 1); assert.equal(s.stage.children.length, 1);
+  assert.equal(s.errors.length, 1); assert.match(s.errors[0], /drop failure/);
+  assert.equal(s.runtime.dropFiles([{ name: 'next.json' }]), true);
+  assert.equal(brokenCalls, 1); assert.equal(healthyCalls, 2);
   s.runtime.dispose(); assert.equal(disposed, 1);
 });
 

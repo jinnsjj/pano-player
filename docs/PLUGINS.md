@@ -74,7 +74,10 @@ part of the contract. The API exposes:
 | `api.apiVersion` | Currently `1`; reject unsupported versions. |
 | `api.getState()` | Snapshot of time, duration, paused state, source dimensions, projection/layout/rotation, view mode, camera pose/FOV/aspect and display widths. |
 | `api.onFrame(fn)` | Receives snapshots on playback/render frames, including while paused. Returns a disposable. Keep work bounded and skip unchanged data. |
-| `api.createPanel({title, icon, placement, toggle})` | Returns an owned container. Default `placement: "settings"` adds a settings section; `"overlay"` adds an inline disclosure under Overlay. Optional `toggle` is a plugin-owned checkbox input, placed beside the module label and arrow; its visibility logic remains the plugin's responsibility. Expansion and toggle state are independent. Populate only the returned container. Icons use the player's Lucide registry; default is `layers`. |
+| `api.onFileDrop(fn)` | Receives an array of dropped local files or named handles exposing async `getFile()` before media handling. URI-only VS Code drops use handles, resolved by bounded extension-host reads. Return `true` synchronously to claim the drop, then resolve/read files asynchronously as needed. Return `false` for unrelated files. The first claiming handler wins. Returns a disposable. |
+| `api.selectJsonFile()` | Optional VS Code capability. Opens a native JSON picker on the current media's host and returns a bounded File, or `null` on cancellation. Web plugins use their own browser file input when this capability is absent. |
+| `api.createPanel({title, icon, placement, toggle, actions})` | Returns an owned container. Default `placement: "settings"` adds a settings section; `"overlay"` adds an inline disclosure under Overlay. Optional `toggle` is a plugin-owned checkbox input, placed beside the module label and arrow; its visibility logic remains the plugin's responsibility. Optional `actions` are plugin-owned buttons in the overlay toolbar, visible even while settings are collapsed. Expansion, actions and toggle state are independent. Populate only owned controls and the returned container. Icons use the player's Lucide registry; default is `layers`. |
+| `api.showPanel(panel)` | Expands an owned overlay panel without changing its visibility checkbox. Useful for showing file import status after a drop. |
 | `api.refreshIcons()` | Refreshes declared icons after creating controls. |
 | `api.createLayer()` | Returns `{canvas, update({visible}), dispose()}`. At most eight layers per plugin. |
 
@@ -90,7 +93,7 @@ The host owns panels, subscriptions, styles and layers. Unload, replacement,
 media close or activation failure releases these resources. Plugin frame and
 activation errors are reported separately from playback. `getState()` on an
 instance is optional diagnostics, not persisted state. The interface does not
-expose media File objects, audio graph objects, player DOM IDs or camera objects.
+expose the current media File object, audio graph objects, player DOM IDs or camera objects.
 
 ## Web Package
 

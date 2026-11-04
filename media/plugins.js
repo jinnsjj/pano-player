@@ -3,9 +3,9 @@ import { OverlayLayer } from './overlay-layer.js';
 import { attachOverlayDisclosure } from './overlay-controls.js';
 
 export class PlayerPlugins {
-  constructor({ getState, getView, stage, panels, overlays, projectionUrl, icons, onError,
+  constructor({ getState, getView, stage, panels, overlays, projectionUrl, icons, onError, selectJsonFile,
     load = url => import(url) }) {
-    Object.assign(this, { getState, getView, stage, panels, overlays, projectionUrl, icons, onError, load });
+    Object.assign(this, { getState, getView, stage, panels, overlays, projectionUrl, icons, onError, selectJsonFile, load });
     this.entries = new Map();
   }
   sync(descriptors = []) {
@@ -14,10 +14,13 @@ export class PlayerPlugins {
     for (const [id, entry] of this.entries) {
       if (JSON.stringify(wanted.get(id)) !== entry.key) { this.remove(id); }
     }
-    for (const descriptor of wanted.values()) if (!this.entries.has(descriptor.id)) void this.start(descriptor);
+    const starting = [];
+    for (const descriptor of wanted.values()) if (!this.entries.has(descriptor.id)) starting.push(this.start(descriptor));
+    return Promise.all(starting);
   }
   async start(descriptor) {
-    const entry = { descriptor, key: JSON.stringify(descriptor), state: 'loading', callbacks: new Set(), resources: [], layers: [] };
+    const entry = { descriptor, key: JSON.stringify(descriptor), state: 'loading', callbacks: new Set(), fileHandlers: new Set(),
+      panels: new Map(), resources: [], layers: [] };
     this.entries.set(descriptor.id, entry);
     const alive = () => !entry.disposed && !this.disposed && entry.state !== 'error';
     const own = resource => { if (!alive()) { resource.dispose(); throw new Error('Plugin session closed.'); } entry.resources.push(resource); return resource; };
@@ -39,15 +42,28 @@ export class PlayerPlugins {
       const api = Object.freeze({
         apiVersion: pluginApiVersion,
         getState: () => Object.freeze(this.getState()),
+        selectJsonFile: this.selectJsonFile ? () => alive() ? this.selectJsonFile() : Promise.reject(new Error('Plugin session closed.')) : undefined,
         refreshIcons: () => this.icons(),
         onFrame(callback) {
           if (typeof callback !== 'function') throw new Error('onFrame requires a function.');
           entry.callbacks.add(callback); return own({ dispose() { entry.callbacks.delete(callback); } });
         },
-        createPanel: ({ title, icon = 'layers', placement = 'settings', toggle }) => {
+        onFileDrop(callback) {
+          if (typeof callback !== 'function') throw new Error('onFileDrop requires a function.');
+          entry.fileHandlers.add(callback); return own({ dispose() { entry.fileHandlers.delete(callback); } });
+        },
+        showPanel: panel => {
+          if (!alive()) return;
+          const button = entry.panels.get(panel);
+          if (!button) throw new Error('showPanel requires an owned overlay panel.');
+          if (panel.hidden) button.click();
+        },
+        createPanel: ({ title, icon = 'layers', placement = 'settings', toggle, actions = [] }) => {
           if (typeof title !== 'string' || !title.trim() || !/^[a-z0-9-]+$/.test(icon)) throw new Error('Invalid panel title or icon.');
           if (!['settings', 'overlay'].includes(placement)) throw new Error('Invalid panel placement.');
           if (toggle !== undefined && (placement !== 'overlay' || toggle?.type !== 'checkbox')) throw new Error('Overlay toggle must be a checkbox input.');
+          if (!Array.isArray(actions) || actions.some(action => action?.tagName !== 'BUTTON') ||
+            (actions.length && placement !== 'overlay')) throw new Error('Overlay actions must be button elements.');
           if (placement === 'overlay') {
             if (!this.overlays) throw new Error('Overlay controls are unavailable.');
             const group = document.createElement('div'); group.className = 'overlay-control';
@@ -67,9 +83,10 @@ export class PlayerPlugins {
             body.setAttribute('role', 'group'); body.setAttribute('aria-labelledby', button.id);
             button.setAttribute('aria-controls', body.id);
             const dispose = attachOverlayDisclosure(button, body);
-            group.append(button);
+            group.append(...actions, button);
             (this.overlays.querySelector('[data-overlay-modules]') || this.overlays.querySelector('.settings-row')).append(group);
             this.overlays.append(body);
+            entry.panels.set(body, button);
             own({ dispose() { dispose(); group.remove(); body.remove(); } });
             this.icons(); return body;
           }
@@ -116,8 +133,23 @@ export class PlayerPlugins {
       }
     }
   }
+  dropFiles(files) {
+    if (this.disposed) return false;
+    const dropped = Array.from(files || []);
+    if (!dropped.length) return false;
+    for (const entry of this.entries.values()) {
+      if (entry.state !== 'active') continue;
+      try {
+        for (const callback of entry.fileHandlers) if (callback(dropped) === true) return true;
+      } catch (error) {
+        entry.state = 'error'; entry.error = error?.message || String(error);
+        this.cleanup(entry); this.onError(`${entry.descriptor.name}: ${entry.error}`);
+      }
+    }
+    return false;
+  }
   cleanup(entry) {
-    entry.callbacks.clear();
+    entry.callbacks.clear(); entry.fileHandlers.clear(); entry.panels.clear();
     const instance = entry.instance; entry.instance = undefined;
     try { instance?.dispose?.(); } catch {}
     for (const resource of entry.resources.splice(0).reverse()) { try { resource.dispose(); } catch {} }

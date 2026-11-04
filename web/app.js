@@ -59,6 +59,8 @@ window.panoWebHost = Object.freeze({
   onPluginsChanged: callback => plugins.subscribe(callback),
   report: announce,
   openFiles(files) {
+    if (!files?.length) return;
+    if (frame?.contentWindow?.__PANO_PLAYER__?.dropFiles(files)) { announce(null); return; }
     if (files.length !== 1) { announce('Select one media file at a time.'); return; }
     openFile(files[0]);
   },

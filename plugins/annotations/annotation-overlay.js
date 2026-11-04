@@ -50,9 +50,11 @@ export class AnnotationOverlay {
   constructor(api) {
     this.api = api;
     const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.id = 'annotation-enabled';
-    const panel = api.createPanel({ title: 'Annotation', placement: 'overlay', toggle: enabled });
+    const open = document.createElement('button'); open.type = 'button'; open.id = 'annotation-open';
+    open.title = 'Open annotation JSON'; open.setAttribute('aria-label', open.title);
+    open.innerHTML = '<i data-lucide="folder-open" aria-hidden="true"></i>';
+    const panel = api.createPanel({ title: 'Annotation', placement: 'overlay', toggle: enabled, actions: [open] });
     panel.innerHTML = `<div class="settings-row">
-      <button id="annotation-open" title="Open annotation JSON" aria-label="Open annotation JSON"><i data-lucide="folder-open" aria-hidden="true"></i></button>
       <input id="annotation-file" type="file" accept=".json,application/json" hidden>
       <span id="annotation-name">No annotation file</span>
       <button id="annotation-clear" title="Remove annotations" aria-label="Remove annotations" disabled><i data-lucide="x" aria-hidden="true"></i></button>
@@ -63,14 +65,14 @@ export class AnnotationOverlay {
     ${annotationFormatHelp}
     <output id="annotation-status" role="status" hidden></output>`;
     const $ = id => panel.querySelector('#' + id);
-    this.controls = { enabled, ...Object.fromEntries(['open', 'file', 'clear', 'labels', 'name', 'count', 'status', 'sources']
+    this.controls = { enabled, open, ...Object.fromEntries(['file', 'clear', 'labels', 'name', 'count', 'status', 'sources']
       .map(key => [key, $('annotation-' + key)])) };
     this.controls.options = panel;
     this.layer = api.createLayer(); this.raw = this.layer.canvas;
-    this.timeline = new AnnotationTimeline([]); this.selected = new Set(); this.revision = 0; this.request = 0;
+    this.timeline = new AnnotationTimeline([]); this.selected = new Set(); this.revision = 0; this.request = 0; this.selection = 0;
     this.events = new AbortController();
     const on = (element, type, fn) => element.addEventListener(type, fn, { signal: this.events.signal });
-    on(this.controls.open, 'click', () => this.controls.file.click());
+    on(this.controls.open, 'click', () => { void this.selectFile(); });
     on(this.controls.file, 'change', event => {
       const file = event.target.files[0]; event.target.value = '';
       if (file) void this.load(file);
@@ -84,13 +86,39 @@ export class AnnotationOverlay {
       this.revision++; this.update(undefined, true);
     });
     this.subscription = api.onFrame(state => this.update(state));
+    this.dropSubscription = api.onFileDrop(files => {
+      if (!files.some(file => /\.json$/i.test(file.name))) return false;
+      api.showPanel(panel);
+      if (files.length !== 1) this.message('Annotations unchanged: Drop one annotation JSON file at a time.');
+      else void this.load(files[0]);
+      return true;
+    });
     this.clear(); api.refreshIcons();
+  }
+  async selectFile() {
+    if (this.disposed) return;
+    if (!this.api.selectJsonFile) { this.controls.file.click(); return; }
+    const selection = ++this.selection, request = this.request;
+    this.controls.open.disabled = true;
+    try {
+      const file = await this.api.selectJsonFile();
+      if (this.disposed || selection !== this.selection || request !== this.request) return;
+      if (file) await this.load(file);
+    } catch (error) {
+      if (!this.disposed && selection === this.selection && request === this.request) {
+        this.api.showPanel(this.controls.options); this.message('Annotations unchanged: ' + (error?.message || String(error)));
+      }
+    } finally {
+      if (!this.disposed && selection === this.selection) this.controls.open.disabled = false;
+    }
   }
   async load(file) {
     const request = ++this.request;
     this.controls.options.setAttribute('aria-busy', 'true');
     this.message('Loading ' + file.name);
     try {
+      file = typeof file.getFile === 'function' ? await file.getFile() : file;
+      if (this.disposed || request !== this.request) return;
       if (!file.size) throw new Error('The file is empty.');
       if (file.size > annotationLimits.bytes) throw new Error('Annotation files must be 20 MB or smaller.');
       const data = validateAnnotations(JSON.parse((await file.text()).replace(/^\uFEFF/, '')));
@@ -110,7 +138,9 @@ export class AnnotationOverlay {
       this.controls.clear.disabled = this.controls.enabled.disabled = this.controls.labels.disabled = false;
       this.revision++; this.message(''); this.update(undefined, true);
     } catch (error) {
-      if (!this.disposed && request === this.request) this.message('Annotations unchanged: ' + error.message);
+      if (!this.disposed && request === this.request) {
+        this.api.showPanel(this.controls.options); this.message('Annotations unchanged: ' + error.message);
+      }
     } finally {
       if (!this.disposed && request === this.request) this.controls.options.removeAttribute('aria-busy');
     }
@@ -150,6 +180,6 @@ export class AnnotationOverlay {
       sources: this.timeline.sources, selected: [...this.selected] };
   }
   dispose() {
-    this.disposed = true; this.request++; this.events.abort(); this.subscription.dispose(); this.layer.dispose();
+    this.disposed = true; this.request++; this.events.abort(); this.subscription.dispose(); this.dropSubscription.dispose(); this.layer.dispose();
   }
 }

@@ -104,7 +104,7 @@ test('FOA directions map left-positive to image-left without reflecting elevatio
   assert.throws(() => directionToPoint([1, 0, 0], 90), /180 or 360/);
 });
 
-function setupOverlay() {
+function setupOverlay(options = {}) {
   function element() {
     const context = { draws: [], boxes: [], texts: [], backgrounds: [], clears: 0, arcs: [],
       clearRect() { this.clears++; this.draws = []; this.boxes = []; this.texts = []; this.backgrounds = []; this.arcs = []; },
@@ -113,6 +113,7 @@ function setupOverlay() {
       measureText(text) { return { width: text.length * 8 }; }, drawImage(...args) { this.draws.push(args); } };
     return Object.assign(new EventTarget(), { width: 2048, height: 1024, clientWidth: 1000, checked: true,
       dataset: {}, style: {}, children: [], getContext: () => context, focus() {},
+      click() { this.clicks = (this.clicks || 0) + 1; this.dispatchEvent(new Event('click')); },
       setAttribute(key, value) { this[key] = value; }, removeAttribute(key) { delete this[key]; },
       replaceChildren(...items) { this.children = items; }, append(...items) { this.children.push(...items); } });
   }
@@ -120,21 +121,98 @@ function setupOverlay() {
   const get = id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const video = Object.assign(new EventTarget(), { videoWidth: 720, videoHeight: 720, currentTime: 0, dataset: {} });
   const layer = { canvas: element(), update({ visible }) { this.visible = visible; }, dispose() { this.disposed = true; } };
-  let callback;
+  let callback, dropCallback;
   const state = () => ({ time: video.currentTime, width: video.videoWidth, height: video.videoHeight, hasVideo: video.videoWidth > 0, sourceDisplayWidth: 500 });
   const api = { getState: state, createPanel: options => {
     elements.set(options.toggle.id, options.toggle);
+    for (const action of options.actions || []) elements.set(action.id, action);
     return { querySelector: selector => get(selector.slice(1)), removeAttribute() {}, setAttribute() {} };
   },
-    createLayer: () => layer, refreshIcons() {}, onFrame(fn) { callback = fn; return { dispose() { callback = undefined; } }; } };
+    showPanel(panel) { panel.hidden = false; },
+    createLayer: () => layer, refreshIcons() {}, onFrame(fn) { callback = fn; return { dispose() { callback = undefined; } }; },
+    onFileDrop(fn) { dropCallback = fn; return { dispose() { dropCallback = undefined; } }; }, ...options };
   const { AnnotationOverlay } = loadModule('../plugins/annotations/annotation-overlay.js', {
     document: { createElement: element }, AbortController,
   });
   const overlay = new AnnotationOverlay(api);
   const file = (annotations, name = 'labels.json') => ({ name, size: 100, async text() { return JSON.stringify({ version: 1, annotations }); } });
   const change = id => get(id).dispatchEvent(new Event('change'));
-  return { overlay, video, get, file, change, layer, frame: () => callback?.(state()) };
+  return { overlay, video, get, file, change, layer, frame: () => callback?.(state()), drop: files => dropCallback?.(files) ?? false };
 }
+
+test('Open uses the host JSON picker when available and browser input otherwise', async () => {
+  let selected, calls = 0;
+  const s = setupOverlay({ selectJsonFile: async () => { calls++; return selected; } });
+  selected = s.file([box()], 'remote.json');
+  s.get('annotation-open').click(); await new Promise(setImmediate);
+  assert.equal(calls, 1); assert.equal(s.get('annotation-file').clicks, undefined);
+  assert.equal(s.overlay.getState().name, 'remote.json'); assert.equal(s.get('annotation-open').disabled, false);
+  s.overlay.dispose();
+  const web = setupOverlay(); web.get('annotation-open').click();
+  assert.equal(web.get('annotation-file').clicks, 1); web.overlay.dispose();
+});
+
+test('picker cancellation and errors preserve the previous annotations and visibility settings', async () => {
+  let error;
+  const s = setupOverlay({ selectJsonFile: async () => { if (error) throw error; return null; } });
+  await s.overlay.load(s.file([box()])); s.get('annotation-enabled').checked = false; s.change('annotation-enabled');
+  const previous = JSON.stringify(s.overlay.getState());
+  s.overlay.controls.options.hidden = true;
+  s.overlay.message('Previous status'); await s.overlay.selectFile();
+  assert.equal(JSON.stringify(s.overlay.getState()), previous); assert.equal(s.get('annotation-status').textContent, 'Previous status');
+  assert.equal(s.overlay.controls.options.hidden, true, 'Cancel does not expand settings');
+  error = new Error('Host cannot read annotation'); await s.overlay.selectFile();
+  assert.equal(JSON.stringify(s.overlay.getState()), previous);
+  assert.match(s.get('annotation-status').textContent, /unchanged.*Host cannot read/);
+  assert.equal(s.overlay.controls.options.hidden, false, 'A host picker error is visible even when opened from the toolbar');
+  assert.equal(s.get('annotation-open').disabled, false); s.overlay.dispose();
+});
+
+test('a pending host picker cannot overwrite a newer import, clear or disposed session', async () => {
+  for (const action of ['replace', 'clear', 'dispose']) {
+    let resolve;
+    const s = setupOverlay({ selectJsonFile: () => new Promise(r => { resolve = r; }) });
+    await s.overlay.load(s.file([box()]));
+    const pending = s.overlay.selectFile(); assert.equal(s.get('annotation-open').disabled, true);
+    if (action === 'replace') s.drop([s.file([point()], 'new.json')]);
+    else s.overlay[action]();
+    resolve(s.file([box()], 'old-picker.json')); await pending; await new Promise(setImmediate);
+    assert.equal(s.overlay.getState().name, action === 'replace' ? 'new.json' : action === 'dispose' ? 'labels.json' : null);
+    if (action !== 'dispose') { assert.equal(s.get('annotation-open').disabled, false); s.overlay.dispose(); }
+  }
+});
+
+test('dropping a single JSON imports annotations without changing playback and unrelated files are ignored', async () => {
+  const s = setupOverlay(); s.video.currentTime = .1;
+  assert.equal(s.drop([s.file([box()], 'labels.JSON')]), true);
+  await new Promise(setImmediate);
+  assert.equal(s.overlay.getState().name, 'labels.JSON');
+  assert.equal(s.overlay.controls.options.hidden, false);
+  assert.equal(s.overlay.getState().active, 1); assert.equal(s.layer.visible, true);
+  assert.equal(s.video.currentTime, .1);
+  assert.equal(s.drop([{ name: 'video.mp4' }]), false);
+  assert.equal(s.drop([]), false);
+  s.overlay.dispose(); assert.equal(s.drop([s.file([point()])]), false);
+});
+
+test('invalid JSON and multi-file drops remain claimed without replacing existing annotations', async () => {
+  const s = setupOverlay(); await s.overlay.load(s.file([box()]));
+  for (const files of [
+    [{ name: 'broken.json', size: 1, text: async () => '{' }],
+    [s.file([point()]), s.file([box()])],
+    [{ name: 'video.mp4' }, s.file([point()])],
+    [{ name: 'empty.json', size: 0 }],
+    [{ name: 'huge.json', size: 21 * 1024 * 1024 }],
+  ]) {
+    assert.equal(s.drop(files), true);
+    await new Promise(setImmediate);
+    assert.equal(s.overlay.getState().name, 'labels.json');
+    assert.equal(s.overlay.getState().total, 1);
+    assert.equal(s.overlay.controls.options.hidden, false);
+    assert.match(s.get('annotation-status').textContent, /unchanged/);
+  }
+  s.overlay.dispose();
+});
 
 test('file import, visibility, labels and source filtering update a paused overlay without touching playback', async () => {
   const s = setupOverlay();
@@ -228,6 +306,26 @@ test('a newer import, clear or dispose prevents a slow old file read from winnin
     assert.equal(s.overlay.getState().name, action === 'replace' ? 'new.json' : null);
     if (action !== 'dispose') s.overlay.dispose();
   }
+});
+
+test('URI-backed handles reserve import order immediately and validate the resolved file', async () => {
+  for (const action of ['replace', 'clear', 'dispose']) {
+    const s = setupOverlay(); let resolve;
+    assert.equal(s.drop([{ name: 'slow.json', getFile: () => new Promise(r => { resolve = r; }) }]), true);
+    if (action === 'replace') await s.overlay.load(s.file([point()], 'new.json'));
+    else s.overlay[action]();
+    resolve(s.file([box()], 'slow.json')); await new Promise(setImmediate);
+    assert.equal(s.overlay.getState().name, action === 'replace' ? 'new.json' : null);
+    if (action !== 'dispose') s.overlay.dispose();
+  }
+  const s = setupOverlay(); await s.overlay.load(s.file([box()]));
+  for (const getFile of [async () => ({ name: 'empty.json', size: 0 }),
+    async () => ({ name: 'huge.json', size: 21 * 1024 * 1024 }),
+    async () => { throw new Error('Cannot read dropped URI'); }]) {
+    assert.equal(s.drop([{ name: 'uri.json', getFile }]), true); await new Promise(setImmediate);
+    assert.equal(s.overlay.getState().name, 'labels.json'); assert.match(s.get('annotation-status').textContent, /unchanged/);
+  }
+  s.overlay.dispose();
 });
 
 test('annotation plugin owns only its panel, frame subscription and a generic layer', async () => {

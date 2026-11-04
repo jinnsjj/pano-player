@@ -138,6 +138,12 @@ Video decoding depends on the host browser's WebCodecs support. Perspective view
 
 Choose **Open With > PanoPlayer** on a media file, or run **PanoPlayer: Open Media**.
 
+A [JSON media configuration](docs/MEDIA-JSON.md) (`.json` or `.jsonpp`) can open a video together with
+multiple external audio files and an optional annotation JSON. Relative paths
+are resolved beside the configuration, including on a VS Code Remote host.
+Video audio remains the default; a video without audio selects the first usable
+external audio file instead.
+
 ### Make PanoPlayer The Default
 
 Run **Preferences: Open User Settings (JSON)** from the Command Palette and add

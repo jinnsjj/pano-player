@@ -5,7 +5,7 @@ const bundledMedia = require('./plugins/catalog.cjs').flatMap(plugin => [plugin.
 // Both distribution targets use this allowlist; unrelated local assets are never copied.
 const media = [
   'audio-switch.js', 'channel-mapper.js', 'channel-routing.js', 'codec-info.js', 'direction-grid.js', 'envelope.js',
-  'floating-overlay.js', 'foa-capture-processor.js', 'icon.png', 'level-meter-processor.js',
+  'drop-resources.js', 'file-drop.js', 'floating-overlay.js', 'foa-capture-processor.js', 'icon.png', 'level-meter-processor.js',
   'libav-6.10.7.1.5-decoder-aac.js', 'libav-6.10.7.1.5-decoder-aac.wasm.js', 'libav-6.10.7.1.5-decoder-aac.wasm.wasm',
   'libav-6.10.7.1.5-decoder-hevc.js', 'libav-6.10.7.1.5-decoder-hevc.wasm.js', 'libav-6.10.7.1.5-decoder-hevc.wasm.wasm',
   'loop-range.js', 'lucide.min.js', 'meter.js', 'monitor.js', 'omnitone.min.js', 'overlay-controls.js', 'overlay-layer.js',

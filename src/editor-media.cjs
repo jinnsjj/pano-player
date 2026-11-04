@@ -2,6 +2,10 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 
+function mediaEditorType(file) {
+  return /\.jsonpp$/i.test(file) ? 'panoPlayer.mediaConfig' : 'panoPlayer.player';
+}
+
 function parseMediaPath(text, paths = path) {
   let file = text.trim();
   if (/\r|\n|\0/.test(file)) throw new Error('Select a single media file path.');
@@ -9,7 +13,7 @@ function parseMediaPath(text, paths = path) {
     file = file.slice(1, -1);
   }
   if (!paths.isAbsolute(file)) throw new Error('Use an absolute file path on the workspace host, not a URL or relative path.');
-  if (!/\.(mp4|webm|mov|mkv|wav|flac)$/i.test(file)) throw new Error('Supported media: MP4, WebM, MOV, MKV, WAV and FLAC.');
+  if (!/\.(mp4|webm|mov|mkv|wav|flac|json|jsonpp)$/i.test(file)) throw new Error('Supported media: MP4, WebM, MOV, MKV, WAV, FLAC and JSON/JSONPP media configurations.');
   return file;
 }
 
@@ -35,10 +39,10 @@ async function openEditorMedia(vscode, editor, extensionUri) {
         uri = uri.with({ scheme: remote.scheme, authority: remote.authority });
       }
     }
-    await vscode.commands.executeCommand('vscode.openWith', uri, 'panoPlayer.player');
+    await vscode.commands.executeCommand('vscode.openWith', uri, mediaEditorType(file));
   } catch (error) {
     await vscode.window.showErrorMessage('PanoPlayer: ' + error.message);
   }
 }
 
-module.exports = { parseMediaPath, openEditorMedia };
+module.exports = { parseMediaPath, openEditorMedia, mediaEditorType };

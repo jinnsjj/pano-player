@@ -12,6 +12,7 @@ import { attachLoopRange } from './loop-range.js';
 import { PlayerPlugins } from './plugins.js';
 import { codecInfo } from './codec-info.js';
 import { attachOverlayDisclosure } from './overlay-controls.js';
+import { attachFileDrop } from './file-drop.js';
 (() => {
   'use strict';
   const hostApi = acquireVsCodeApi();
@@ -38,8 +39,13 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
   let view; let viewMode = 'flat'; let viewLoading;
   let projector; let projectionLoading; let projectionRequest = 0;
   let ready = false; let mappedAt = null; let lastMap; let processingIssue = false; let disposed = false;
+  let resolvePlaybackReady;
+  const playbackReady = new Promise(resolve => { resolvePlaybackReady = resolve; });
   let switchingTrack = false;
   let audioSource = 'primary', switchRequest = 0;
+  let sessionReceived = false, pluginsReady;
+  const mediaSession = crypto.randomUUID();
+  const audioProbes = new Set();
   const mapper = new ChannelMapper(() => monitor, () => { lastMap = null; clear(); });
   const audioSwitcher = new AudioSwitcher(video, api, {
     monitor: () => monitor, settings: () => preferences, onError: processingError, onMap: acceptMap,
@@ -52,6 +58,7 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
   });
   let hasVideo = true; let sourceAspect = 2; let mediaDetail = 'Native media';
   const plugins = new PlayerPlugins({ getState: pluginState, getView: () => view, stage: $('stage'), panels: $('plugin-panels'), overlays: $('overlay-options'),
+    selectJsonFile: hostApi.openFiles ? undefined : () => fileInputs.selectJsonFile(),
     projectionUrl: video.dataset.view, icons, onError(message) { $('plugin-status').textContent = message; $('plugin-status').hidden = false; } });
   function pluginState() {
     const projection = effectiveProjection(), spatial = viewMode === 'spatial';
@@ -234,15 +241,17 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
     sources.get(audioSource).tracks = video.audioTracks;
     const options = [];
     for (const source of sources.values()) {
-      if (!source.tracks) continue;
-      for (const track of source.tracks) {
+      for (const track of source.tracks || []) {
         const label = [source.name, String(track.index + 1), track.name, track.language === 'und' ? '' : track.language,
           track.channels + 'ch', track.codec, track.supported ? '' : 'unsupported'].filter(Boolean).join(' / ');
         const option = new Option(label, JSON.stringify([source.id, track.index]));
         option.disabled = !track.supported; options.push(option);
       }
-      if (!source.tracks.length && source.id === 'primary') {
-        options.push(new Option(source.name + ' / No audio', JSON.stringify([source.id, null])));
+      if (!source.tracks?.length) {
+        const label = source.error ? 'Unavailable' : source.tracks ? 'No audio' : 'Loading';
+        const option = new Option(source.name + ' / ' + label, JSON.stringify([source.id, null]));
+        option.disabled = source.id !== 'primary'; option.title = source.error || '';
+        options.push(option);
       }
     }
     $('audio-track').replaceChildren(...options);
@@ -281,6 +290,7 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
   }
   function canPlay() {
     ready = true;
+    resolvePlaybackReady();
     const waitingForHevc = hasVideo && video.videoDecoder === 'FFmpeg/WASM' && !video.frames;
     $('empty').hidden = !waitingForHevc;
     if (waitingForHevc) $('status').textContent = 'Decoding HEVC video';
@@ -294,6 +304,7 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
   video.addEventListener('durationchange', transport);
   function mediaError() {
     ready = false; reset();
+    resolvePlaybackReady();
     mapper.sync();
     $('audio-track').disabled = $('audio-open').disabled = true;
     const message = 'Playback failed: ' + (video.error?.message || 'codec or resource unavailable');
@@ -345,16 +356,83 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
       await audioSwitcher.select(source, index);
       $('retry').hidden = true; updateDetail();
       if (request === switchRequest) $('audio-switch-status').hidden = true;
+      return true;
     } catch (error) {
       if (request === switchRequest && !disposed) {
         $('audio-switch-status').textContent = 'Audio unchanged: ' + error.message;
         metadata();
       }
+      return false;
     }
     finally {
       if (request === switchRequest) {
         switchingTrack = false; $('audio-options').setAttribute('aria-busy', 'false'); transport();
       }
+    }
+  }
+  async function probeAudio(source) {
+    const element = document.createElement('canvas');
+    Object.assign(element.dataset, video.dataset, { source: source.url });
+    const session = new window.StreamPlayer(element, { ...api, audioOnly: true, deferEnvelope: true });
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 20000);
+    const probe = { dispose() { clearTimeout(timer); abort.abort(); session.dispose(); } };
+    audioProbes.add(probe);
+    try {
+      await audioSwitcher.wait(session.metadata, abort.signal);
+      if (disposed) return;
+      source.tracks = session.audioTracks;
+      source.defaultTrackIndex = session.audioTrackIndex;
+      if (!source.tracks?.some(track => track.supported)) throw new Error('No supported audio track.');
+    } catch (error) {
+      if (!disposed) {
+        source.tracks = []; source.error = abort.signal.aborted ? 'Reading audio metadata timed out.' : error.message;
+      }
+    } finally {
+      probe.dispose(); audioProbes.delete(probe);
+      if (!disposed) metadata();
+    }
+  }
+  async function loadSessionSources(descriptors) {
+    const added = [];
+    for (const source of descriptors || []) {
+      if (!source?.id || source.id === 'primary' || sources.has(source.id)) continue;
+      sources.set(source.id, { ...source }); added.push(sources.get(source.id));
+    }
+    metadata();
+    // Bound concurrent decoder/host reads; unselected files never start PCM or envelope playback.
+    await Promise.all([0, 1].map(async start => {
+      for (let index = start; index < added.length && !disposed; index += 2) {
+        const source = added[index];
+        await probeAudio(source);
+      }
+    }));
+    await video.metadata;
+    if (disposed || switchRequest !== 0 || sources.get('primary').tracks?.length) return;
+    // Do not replace silent audio before the primary video has emitted its first canplay.
+    await playbackReady; await monitor.initialized;
+    let expectedRequest = 0;
+    for (const source of added) {
+      if (disposed || !ready || video.error || switchRequest !== expectedRequest) break;
+      if (source.error) continue;
+      const playable = track => track.supported && track.channels > 0 && track.channels <= 32;
+      const track = source.tracks?.find(track => track.index === source.defaultTrackIndex && playable(track)) || source.tracks?.find(playable);
+      if (!track) continue;
+      const changed = await switchAudio(source, track.index);
+      expectedRequest++;
+      if (changed) break;
+    }
+  }
+  async function loadSessionAnnotation(data) {
+    await pluginsReady;
+    if (disposed) return;
+    try {
+      if (data.error) throw new Error(data.error);
+      if (!plugins.dropFiles([new File([data.file.text], data.file.name, { type: 'application/json' })])) {
+        throw new Error('No enabled plugin accepts this annotation file.');
+      }
+    } catch (error) {
+      $('plugin-status').textContent = 'Annotation unavailable: ' + error.message; $('plugin-status').hidden = false;
     }
   }
   $('audio-track').addEventListener('change', () => {
@@ -424,8 +502,25 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
     persist({ normalization: $('normalization').value });
   });
   $('retry').addEventListener('click', () => location.reload());
+  const fileInputs = attachFileDrop(window, {
+    openFiles(files) {
+      $('plugin-status').hidden = true;
+      if (hostApi.openFiles) hostApi.openFiles(files);
+      else plugins.dropFiles(files);
+    },
+    postMessage: hostApi.openFiles ? undefined : message => api.postMessage(message),
+    onError(message) { $('plugin-status').textContent = message; $('plugin-status').hidden = false; },
+  });
   window.addEventListener('message', ({ data }) => {
+    if (disposed) return;
     if (data?.type === 'suspend') video.pause();
+    if (data?.type === 'media-session' && data.session === mediaSession && !sessionReceived) {
+      sessionReceived = true;
+      void loadSessionSources(data.sources).catch(error => {
+        if (!disposed) { $('audio-switch-status').hidden = false; $('audio-switch-status').textContent = error.message; }
+      });
+    }
+    if (data?.type === 'session-annotation' && data.session === mediaSession) void loadSessionAnnotation(data);
     if (data?.type === 'audio-source' && data.source?.id && data.source.id !== 'primary') {
       sources.set(data.source.id, { ...sources.get(data.source.id), ...data.source });
       metadata();
@@ -437,13 +532,16 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
   });
   function dispose() {
     if (disposed) return;
-    disposed = true; audioSwitcher.cancel(); loop.dispose(); disposeViewportResize(); projectionRequest++;
+    disposed = true; audioSwitcher.cancel(); loop.dispose(); disposeViewportResize(); fileInputs.dispose(); projectionRequest++;
+    resolvePlaybackReady();
+    for (const probe of audioProbes) probe.dispose();
+    audioProbes.clear();
     disposePluginSubscription?.(); plugins.dispose();
     for (const dispose of disposeOverlayControls) dispose();
     projector?.dispose(); view?.dispose(); monitor.dispose(); video.dispose();
   }
   window.addEventListener('pagehide', dispose);
-  window.__PANO_PLAYER__ = { get monitor() { return monitor; }, dispose, get view() { return view; }, getState: () => ({
+  window.__PANO_PLAYER__ = { get monitor() { return monitor; }, dispose, dropFiles: files => plugins.dropFiles(files), get view() { return view; }, getState: () => ({
     ...stats, ready, generation: monitor.generation, currentTime: video.currentTime, paused: video.paused, mappedAt,
     audioTracks: video.audioTracks, audioTrackIndex: video.audioTrackIndex, audioSource, switchingTrack,
     loop: loop.getState(),
@@ -452,7 +550,7 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
     videoQuality: (() => { const q = video.getVideoPlaybackQuality?.(); return q && { total: q.totalVideoFrames, dropped: q.droppedVideoFrames }; })(),
   }) };
   applyPreferences(); mapper.sync(); icons(); layoutProjection(); requestAnimationFrame(tick);
-  plugins.sync(hostApi.getPlugins?.() || JSON.parse(video.dataset.plugins || '[]'));
+  pluginsReady = plugins.sync(hostApi.getPlugins?.() || JSON.parse(video.dataset.plugins || '[]'));
   const disposePluginSubscription = hostApi.onPluginsChanged?.(() => {
     $('plugin-status').hidden = true; plugins.sync(hostApi.getPlugins());
   });
@@ -460,4 +558,5 @@ import { attachOverlayDisclosure } from './overlay-controls.js';
   if (video.readyState >= 3) canPlay();
   if (video.error) mediaError();
   void monitor.prepare();
+  if (video.dataset.session === '1') api.postMessage({ type: 'player-ready', session: mediaSession });
 })();

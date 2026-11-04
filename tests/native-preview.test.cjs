@@ -12,9 +12,8 @@ test('local and cloud editors expose the original media immediately without host
       with(changes) { return uri(p, changes.query ?? query); },
       toString() { return `${scheme}://${authority}${p}${query ? '?' + query : ''}`; } });
     const disposable = { dispose() {} };
-    const commands = new Map(), opened = [];
+    const commands = new Map(), opened = [], providers = new Map();
     const selected = uri('/workspace/selected.webm');
-    let provider, editorId;
     const vscode = {
       env: { remoteName: remote ? 'cloud-ide' : undefined },
       Uri: { joinPath: (base, ...parts) => uri(path.posix.join(base.path, ...parts)) },
@@ -22,7 +21,7 @@ test('local and cloud editors expose the original media immediately without host
       window: {
         createOutputChannel: () => ({ ...disposable, appendLine() {} }),
         showOpenDialog: async () => [selected],
-        registerCustomEditorProvider: (id, value) => { editorId = id; provider = value; return disposable; },
+        registerCustomEditorProvider: (id, value) => { providers.set(id, value); return disposable; },
       },
       commands: {
         registerTextEditorCommand: (id, handler) => { commands.set(id, handler); return disposable; },
@@ -43,9 +42,12 @@ test('local and cloud editors expose the original media immediately without host
     module.exports.activate({ subscriptions: [], extensionUri: uri('/extension'), globalStorageUri: uri('/cache'),
       globalState: { get: key => storage.get(key), update: async (key, value) => { storage.set(key, value); } } });
     const manifest = require('../package.json');
-    assert.equal(editorId, 'panoPlayer.player');
+    const editorId = 'panoPlayer.player', provider = providers.get(editorId);
+    assert.ok(provider);
+    assert.equal(providers.get('panoPlayer.mediaConfig'), provider, 'JSONPP shares the existing playback provider');
     assert.equal(manifest.contributes.customEditors[0].viewType, editorId);
-    assert.deepEqual(manifest.activationEvents, ['onCustomEditor:' + editorId]);
+    assert.deepEqual([...providers.keys()], manifest.contributes.customEditors.map(editor => editor.viewType));
+    assert.deepEqual(manifest.activationEvents, [...providers.keys()].map(id => 'onCustomEditor:' + id));
     assert.deepEqual([...commands.keys()].sort(), ['panoPlayer.open', 'panoPlayer.openPath']);
     assert.deepEqual(manifest.contributes.commands.map(c => c.command).sort(), [...commands.keys()].sort());
     const reference = fs.readFileSync(path.join(__dirname, '../docs/REFERENCE.md'), 'utf8');
