@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.49 - 2026-11-18
+
+### Added
+
+- Show the installed version (for example `v0.4.49`) beside the PanoPlayer name in the player header on desktop and VS Code Remote, and in the web player's toolbar. It is read from the package at build time, with the full version in the tooltip.
+
 ## 0.4.48 - 2026-11-18
 
 ### Improved

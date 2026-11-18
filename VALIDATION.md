@@ -1,6 +1,6 @@
 # PanoPlayer Validation
 
-Source version: 0.4.48. Updated 2026-11-18.
+Source version: 0.4.49. Updated 2026-11-18.
 
 ## Naming
 
@@ -31,6 +31,11 @@ bundled; a separate check verifies that the packaged README links each
 `codec-sources-v1` release asset with a SHA-256 hash matching the repository copy.
 
 ## Acceptance Boundary
+
+Version 0.4.49: 337 automated checks passed, three optional fixture tests skipped;
+the web build's seven checks and the actual VSIX archive check passed. The version
+label rendered beside the brand in a real remote extension host (`code serve-web`)
+and in the web toolbar at 1440 px and 390 px without horizontal overflow.
 
 Version 0.4.48: 336 automated checks passed, three optional fixture tests skipped;
 the static web build and its seven checks passed, and the actual VSIX passed the
