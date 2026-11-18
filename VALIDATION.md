@@ -1,6 +1,6 @@
 # PanoPlayer Validation
 
-Source version: 0.4.38. Updated 2026-11-03.
+Source version: 0.4.48. Updated 2026-11-18.
 
 ## Naming
 
@@ -26,9 +26,25 @@ FFmpeg/libav objects must be fetched through Git LFS before packaging.
 
 Validate the actual archive with `PANO_PLAYER_VSIX=/path/to/player.vsix npm test`.
 The archive check requires `unzip` and verifies the exact public file list,
-corresponding source attachments, hydrated assets, byte equality and WASM validity.
+hydrated assets, byte equality and WASM validity. Codec source archives are not
+bundled; a separate check verifies that the packaged README links each
+`codec-sources-v1` release asset with a SHA-256 hash matching the repository copy.
 
 ## Acceptance Boundary
+
+Version 0.4.48: 336 automated checks passed, three optional fixture tests skipped;
+the static web build and its seven checks passed, and the actual VSIX passed the
+archive check. A simulated-latency test sustained more than 150 Mbit/s of host
+reads at a 40 ms round trip (measured 338 Mbit/s, versus about 50 Mbit/s before).
+Installed desktop VS Code played 3840x1920 H.264 and 5760x2880 HEVC (VideoToolbox
+bridge) with 4-channel AAC at about 30 fps with no dropped frames, including
+pause, seek and end-of-file replay; a three-run A/B showed unchanged first-frame
+time. The static web build in Chrome passed its browser scenario and played both
+fixtures in real time. A real remote extension host (`code serve-web`, documents
+opened as `vscode-remote`) played JSONPP sessions and direct MP4 files at 30 fps
+with working seeks and switched to session external FOA audio mid-playback, with
+no page errors. Remote throughput over a high-latency network was measured with
+the simulated-latency test, not a physical remote link.
 
 Version 0.4.38: 184 automated checks passed, one optional codec fixture test
 skipped, with the actual repacked VSIX supplied. All eight corresponding-source

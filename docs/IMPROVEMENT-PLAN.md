@@ -1,6 +1,6 @@
 # PanoPlayer Improvement Plan
 
-Review date: 2026-11-18 (version 0.4.47). Status markers: **[done]** shipped in the
+Review date: 2026-11-18 (version 0.4.47). Status markers: **[done]** shipped in 0.4.48, the
 performance and package-size pass, **[open]** still recommended.
 
 ## 1. Architecture

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.48 - 2026-11-18
+
+### Improved
+
+- Stream host-backed media faster on desktop and VS Code Remote: prefetch the next block while the current one is decoded and grow blocks to 1 MiB. Sustained reads at a 40 ms Remote round trip rise from about 50 to about 338 Mbit/s, keeping high-bitrate panoramic video fed over slow links.
+- Queue up to three decoded WebCodecs frames and present the newest due frame when behind, absorbing short decoder stalls. WASM HEVC keeps a single frame to bound memory.
+- Shrink the VSIX from 20 MB to 2.2 MB. Codec source archives are published with SHA-256 hashes as assets of the `codec-sources-v1` GitHub Release, linked from `codec-sources/README.md` and `THIRD_PARTY_NOTICES.md`; every decoder remains bundled, so all playback features work immediately after installation. The extension icon is now 256 x 256.
+
 ## 0.4.47 - 2026-11-14
 
 ### Added
