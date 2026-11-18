@@ -11,6 +11,7 @@ const { normalize } = require('./preferences.cjs');
 const { openEditorMedia, mediaEditorType } = require('./editor-media.cjs');
 const { createPluginRegistry } = require('./plugin-registry.cjs');
 const bundledPlugins = require('../plugins/catalog.cjs');
+const { version } = require('../package.json');
 
 function activate(context) {
   const log = vscode.window.createOutputChannel('PanoPlayer');
@@ -50,7 +51,7 @@ function activate(context) {
         monitor: asset('monitor.js'), view: asset('view.js'), icons: asset('lucide.min.js'), logo: asset('icon.png'),
         worker: asset('powermap-worker.js'), worklet: asset('foa-capture-processor.js'),
         decoder: asset('stream-worker.js'), pcm: asset('pcm-processor.js'), stream: asset('stream-player.js'),
-        plugins: plugins.descriptors(panel.webview),
+        plugins: plugins.descriptors(panel.webview), version,
       });
       const media = hostFile(mediaUri.fsPath, message => panel.webview.postMessage(message));
       const videoStreams = new Map();

@@ -25,6 +25,9 @@ test('web build ships a self-contained static player and decoder assets', { skip
     }
   }
   const player = fs.readFileSync(path.join(root, 'player.html'), 'utf8');
+  const { version } = require('../package.json');
+  assert.ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').includes(`<strong>PanoPlayer</strong><span class="brand-version" title="PanoPlayer version ${version}">v${version}</span>`),
+    'The web toolbar shows the package version beside the brand');
   const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(index, /id="project-link" href="https:\/\/github.com\/jinnsjj\/pano-player" target="_blank" rel="noopener noreferrer"/);
   assert.match(index, /<dialog id="help-dialog" lang="zh-CN" aria-labelledby="help-title">/);

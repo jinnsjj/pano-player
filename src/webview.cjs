@@ -1,6 +1,8 @@
 'use strict';
 const escape = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const { defaults, normalize } = require('./preferences.cjs');
+// Shown beside the product name; the extension and the web build pass package.json's version.
+const brandVersion = version => version ? `<span class="brand-version" title="PanoPlayer version ${escape(version)}">v${escape(version)}</span>` : '';
 function meterColumn(id, label, title, clips = false) {
   return `<div class="meter-column"><output id="${id}-max" class="meter-maximum" aria-label="${title} maximum">--</output>
     <div id="${id}" class="loudness-track" role="meter" aria-label="${title}" aria-valuemin="-72" aria-valuemax="0" aria-valuenow="-72" aria-valuetext="No measurement"><span class="loudness-fill"></span><span id="${id}-hold" class="meter-hold" hidden></span></div>
@@ -11,14 +13,14 @@ function meterGroup(title, unit, kind, columns) {
   return `<section class="meter-group ${kind}" aria-label="${title}"><h3 title="${title} (${unit})">${title}<span>${unit}</span></h3><div class="meter-columns">
     <div class="meter-axis" aria-hidden="true">${[0, -12, -24, -48, -72].map(db => `<span data-db="${db}">${db}</span>`).join('')}</div>${columns}</div></section>`;
 }
-function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, monitor, view, nonce, source, worker, worklet, decoder, pcm, stream, hostMedia = false, mediaSession = false, preferences, bootstrap, extraStyle, plugins = [] }) {
+function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, monitor, view, nonce, source, worker, worklet, decoder, pcm, stream, hostMedia = false, mediaSession = false, preferences, bootstrap, extraStyle, plugins = [], version }) {
   return `<!doctype html><html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; img-src ${cspSource} data:; media-src ${cspSource}; connect-src ${cspSource}; worker-src blob:; style-src ${cspSource} blob:; script-src ${cspSource} blob: 'wasm-unsafe-eval'${nonce ? ` 'nonce-${nonce}'` : ''};">
 <link rel="stylesheet" href="${escape(style)}">${extraStyle ? `<link rel="stylesheet" href="${escape(extraStyle)}">` : ''}<title>${escape(title)} - PanoPlayer</title></head>
 <body id="player">
 <header>
-  <div class="brand"><img src="${escape(logo || '')}" width="32" height="32" alt="" aria-hidden="true"><strong>PanoPlayer</strong></div>
+  <div class="brand"><img src="${escape(logo || '')}" width="32" height="32" alt="" aria-hidden="true"><strong>PanoPlayer</strong>${brandVersion(version)}</div>
 </header>
 <main id="player-layout">
   <div class="viewport" id="playback-viewport">
@@ -161,4 +163,4 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
 ${bootstrap ? `<script src="${escape(bootstrap)}"></script>` : ''}
 <script nonce="${nonce || ''}" src="${escape(icons)}"></script><script nonce="${nonce || ''}" src="${escape(omnitone)}"></script><script type="module" nonce="${nonce || ''}" src="${escape(stream)}"></script><script type="module" nonce="${nonce || ''}" src="${escape(monitor)}"></script><script type="module" nonce="${nonce || ''}" src="${escape(script)}"></script></body></html>`;
 }
-module.exports = { renderHtml };
+module.exports = { brandVersion, renderHtml };

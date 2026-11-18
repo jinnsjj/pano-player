@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { renderHtml } = require('../src/webview.cjs');
 const manifest = require('../package.json');
+const fs = require('node:fs');
+const path = require('node:path');
 test('extension manifest accepts VS Code 1.84 releases', () => {
   assert.equal(manifest.engines.vscode, '^1.84.0');
 });
@@ -154,6 +156,16 @@ test('header leaves filenames to the editor tab and metadata belongs to the foot
   assert.doesNotMatch(html, /id="filename"/);
   assert.doesNotMatch(html, /id="music-badge"|id="metrics"/);
   assert.match(html, /<footer><span id="detail" role="status">/);
+  assert.doesNotMatch(header, /brand-version/, 'Without a version, the brand shows only the name');
+  const versioned = renderHtml({ title: 'review.webm', version: '1.2.3' }).match(/<header>[\s\S]*?<\/header>/)[0];
+  assert.match(versioned, /<strong>PanoPlayer<\/strong><span class="brand-version" title="PanoPlayer version 1.2.3">v1.2.3<\/span>/);
+  assert.match(renderHtml({ title: 'x', version: '<b>' }), /v&lt;b&gt;/, 'Version text is escaped');
+});
+test('the extension passes its package.json version to the player header', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/extension.cjs'), 'utf8');
+  assert.match(source, /const \{ version \} = require\('\.\.\/package\.json'\)/);
+  assert.match(source, /plugins: plugins\.descriptors\(panel\.webview\), version,/);
+  assert.ok(fs.readFileSync(path.join(__dirname, '../.vscodeignore'), 'utf8').split(/\r?\n/).includes('!package.json'));
 });
 test('WAV is registered in the editor selector and open command', () => {
   assert.ok(manifest.contributes.customEditors[0].selector.some(s => s.filenamePattern === '*.wav'));

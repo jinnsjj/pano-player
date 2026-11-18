@@ -43,6 +43,7 @@ header { min-height: 56px; padding: 12px 24px; display: flex; align-items: cente
 .brand { display: flex; align-items: center; gap: 10px; flex: none; }
 .brand > img { width: 32px; height: 32px; object-fit: contain; flex: none; }
 .brand strong { font-size: 16px; font-weight: 600; }
+.brand-version { align-self: flex-end; margin: 0 0 3px -4px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 main { max-width: 1920px; margin: 0 auto; }
 #player-layout { display: flex; flex-direction: column; width: 100%; flex: 1; min-height: 0; }
 #player-layout > .viewport, #viewport-resize, #transport { flex: none; }
