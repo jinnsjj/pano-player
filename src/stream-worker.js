@@ -156,7 +156,8 @@ async function pullAudio(generation) {
     }
     if (skip + Math.max(0, count) >= sample.numberOfFrames) { sample.close(); pendingAudio = undefined; }
   }
-  const channels = buffers.map(buffer => buffer.slice(0, length));
+  // Full chunks (the steady state) are transferred as-is; only a short final chunk is trimmed.
+  const channels = length === buffers[0].length ? buffers : buffers.map(buffer => buffer.slice(0, length));
   send({ type: 'audio', channels, eof, endFrame: audioCursor }, channels.map(channel => channel.buffer));
 }
 async function pullVideo(generation) {

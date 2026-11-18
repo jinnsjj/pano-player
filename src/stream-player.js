@@ -15,6 +15,8 @@ export class StreamPlayer extends EventTarget {
     this.paused = true; this.readyState = 0; this.epoch = 0; this.time = api?.time ?? 0; this.duration = NaN;
     this.videoWidth = 0; this.videoHeight = 0; this.frames = 0; this.dropped = 0;
     this.previewFrame = true;
+    // Decoded frames waiting for presentation, oldest first. A short queue absorbs decoder jitter.
+    this.frameQueue = []; this.videoPending = 0; this.frameDepth = 1;
     this.abort = new AbortController();
     const fetchHost = api && this.dataset.host === '1' ? createHostFetch(api, this.dataset.source, this.abort.signal) : fetch;
     this.fetchResource = (url, init = {}) => {
@@ -31,6 +33,9 @@ export class StreamPlayer extends EventTarget {
     this.metadata.catch(() => {});
     this.load();
   }
+  get nextFrame() { return this.frameQueue[0]; }
+  set nextFrame(frame) { this.frameQueue = frame ? [frame] : []; }
+  clearFrames() { for (const frame of this.frameQueue) frame.frame.close(); this.frameQueue = []; }
   get hidden() { return this.element.hidden; }
   set hidden(value) { this.element.hidden = value; }
   get currentTime() { return this.time; }
@@ -101,6 +106,8 @@ export class StreamPlayer extends EventTarget {
       this.videoCodec = data.videoCodec; this.videoCodecString = data.videoCodecString;
       this.videoDecoder = data.videoDecoder;
       this.videoLive = Boolean(data.videoLive);
+      // WASM frames are large CPU copies and decoding is the bottleneck; hardware frames are cheap to hold.
+      this.frameDepth = data.videoDecoder === 'FFmpeg/WASM' ? 1 : 3;
       this.videoWidth = data.width; this.videoHeight = data.height;
       this.element.width = Math.max(1, data.renderWidth || data.width); this.element.height = Math.max(1, data.renderHeight || data.height);
       this.codec = data.codec; this.readyState = 1; this.metadataReady(); this.emit('loadedmetadata');
@@ -117,10 +124,10 @@ export class StreamPlayer extends EventTarget {
       }
       this.refill();
     } else if (data.type === 'video') {
-      this.videoPending = false; this.nextFrame = data;
-      this.render();
+      this.videoPending = Math.max(0, this.videoPending - 1); this.frameQueue.push(data);
+      this.render(); this.requestVideo();
     } else if (data.type === 'video-end') {
-      this.videoPending = false; this.videoEnded = true; this.updateVideoBuffering();
+      this.videoPending = Math.max(0, this.videoPending - 1); this.videoEnded = true; this.updateVideoBuffering();
     }
   }
   async attach(context, destination) {
@@ -166,8 +173,12 @@ export class StreamPlayer extends EventTarget {
     this.audioPending = true; this.worker.postMessage({ type: 'audio', epoch: this.epoch });
   }
   requestVideo() {
-    if (!this.videoWidth || this.nextFrame || this.videoPending || this.videoEnded) return;
-    this.videoPending = true; this.worker.postMessage({ type: 'video', epoch: this.epoch });
+    if (!this.videoWidth || this.videoEnded) return;
+    // Until the first picture is shown after open or seek, request only that picture.
+    const depth = this.previewFrame ? 1 : this.frameDepth;
+    while (this.frameQueue.length + this.videoPending < depth) {
+      this.videoPending++; this.worker.postMessage({ type: 'video', epoch: this.epoch });
+    }
   }
   advanceVideoClock() {
     if (this.audioSession || this.channels !== 0 || this.paused || this.videoBlocked || this.clockStartedAt === undefined) return;
@@ -195,11 +206,16 @@ export class StreamPlayer extends EventTarget {
   render() {
     this.audioSession?.advanceVideoClock();
     this.advanceVideoClock();
-    const frame = this.nextFrame;
-    if (frame && (this.previewFrame || frame.time <= this.time + .025)) {
+    const queue = this.frameQueue;
+    if (queue.length && (this.previewFrame || queue[0].time <= this.time + .025)) {
+      // When behind, present the newest due frame and skip the older ones.
+      while (!this.previewFrame && queue.length > 1 && queue[1].time <= this.time + .025) {
+        queue.shift().frame.close(); this.dropped++;
+      }
+      const frame = queue.shift();
       this.previewFrame = false;
       this.element.getContext('2d').drawImage(frame.frame, 0, 0, this.element.width, this.element.height);
-      frame.frame.close(); this.nextFrame = undefined; this.frames++;
+      frame.frame.close(); this.frames++;
       // A decoded picture is available even while the audio pipeline is initializing.
       this.readyState = Math.max(this.readyState, 2);
       this.videoEndTime = frame.time + frame.duration;
@@ -247,7 +263,7 @@ export class StreamPlayer extends EventTarget {
     this.time = Math.max(0, Math.min(value, Number.isFinite(this.duration) ? this.duration : value));
     this.epoch++; this.seeking = true; this.ended = false; this.eof = false;
     this.endFrame = this.time * this.sampleRate; this.audioPending = false;
-    this.nextFrame?.frame.close(); this.nextFrame = undefined; this.videoPending = false; this.videoEnded = false;
+    this.clearFrames(); this.videoPending = 0; this.videoEnded = false;
     this.previewFrame = true;
     this.clockStartedAt = undefined; this.videoEndTime = undefined;
     this.updateVideoBuffering();
@@ -315,7 +331,7 @@ export class StreamPlayer extends EventTarget {
     this.audioEvents?.abort(); this.audioSession?.dispose();
     this.disposed = true; this.abort.abort(); this.worker?.terminate();
     this.clearEnvelope();
-    this.nextFrame?.frame.close(); this.node?.disconnect();
+    this.clearFrames(); this.node?.disconnect();
     if (this.node) this.node.port.onmessage = null;
   }
 }

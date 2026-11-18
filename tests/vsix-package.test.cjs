@@ -5,12 +5,15 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
+// Codec source archives are published as release assets (see codec-sources/README.md), not bundled.
+const releasedSources = {
+  'codec-sources/ffmpeg-7.1.5.tar.xz': 'de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f',
+  'codec-sources/libav.js.tar.gz': 'b3a9326145224b032780a7565387a48e1a7457931bbc702d4affdfdecce1b3c4',
+  'codec-sources/emfiberthreads-1.3.tar.gz': '0fe933d7742de3b3213608e0fb087a1ae0d060604d5835f7c9cdfcee0fc8cbcb',
+  'codec-sources/mediabunny-1.56.2.tar.gz': '7db24cf2f17954a66e4108b40f8fc7159ade5afefcc689ab35dd205c367e3ccc',
+};
 const sources = [
   'codec-sources/README.md',
-  'codec-sources/ffmpeg-7.1.5.tar.xz',
-  'codec-sources/libav.js.tar.gz',
-  'codec-sources/emfiberthreads-1.3.tar.gz',
-  'codec-sources/mediabunny-1.56.2.tar.gz',
   'meter-sources/loudness_meter',
   'src/loudness-meter.js',
   'src/level-meter-processor.js',
@@ -32,6 +35,22 @@ test('extension allowlist retains the promised codec and loudness-meter sources'
     const bytes = fs.readFileSync(path.join(root, file));
     assert.ok(bytes.length > 0, file);
     assert.ok(!bytes.subarray(0, lfsHeader.length).equals(lfsHeader), `${file} must be hydrated, not an LFS pointer`);
+  }
+});
+
+test('released codec source archives match the hashes and links published in the packaged README', () => {
+  const readme = fs.readFileSync(path.join(root, 'codec-sources/README.md'), 'utf8');
+  const notices = fs.readFileSync(path.join(root, 'THIRD_PARTY_NOTICES.md'), 'utf8');
+  assert.match(notices, /releases\/tag\/codec-sources-v1/);
+  const rules = new Set(fs.readFileSync(path.join(root, '.vscodeignore'), 'utf8').split(/\r?\n/));
+  for (const [file, hash] of Object.entries(releasedSources)) {
+    const name = path.basename(file);
+    assert.ok(readme.includes(`releases/download/codec-sources-v1/${name}`), `${name} release link`);
+    assert.ok(readme.includes(hash), `${name} hash`);
+    assert.ok(!rules.has('!' + file), `${name} must not be bundled in the VSIX`);
+    const bytes = fs.readFileSync(path.join(root, file));
+    if (bytes.subarray(0, lfsHeader.length).equals(lfsHeader)) continue; // LFS pointer checkout
+    assert.equal(require('node:crypto').createHash('sha256').update(bytes).digest('hex'), hash, `${name} content`);
   }
 });
 

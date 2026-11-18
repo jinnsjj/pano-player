@@ -44,14 +44,18 @@ excluded from the VSIX. Python, NumPy, SciPy and OpenCV are not required.
 The player bundles separate decoder-only LGPL FFmpeg 7.1.5 AAC and HEVC WebAssembly
 builds through libav.js. No GPL or nonfree FFmpeg components are enabled, and no
 host FFmpeg installation is required. Their license is in
-`media/LICENSE-ffmpeg.txt`; corresponding source archives and rebuild instructions
-are distributed in `codec-sources/`.
+`media/LICENSE-ffmpeg.txt`. Rebuild instructions ship in `codec-sources/README.md`;
+the corresponding source archives are published, with SHA-256 hashes, as assets of
+the `codec-sources-v1` release at
+https://github.com/jinnsjj/pano-player/releases/tag/codec-sources-v1 and in the
+repository's `codec-sources/` directory.
 
 The HEVC variant is loaded only when native WebCodecs cannot decode the selected
 HEVC configuration. Its MIT application adapter is `src/hevc-decoder.js`.
 
 Mediabunny 1.56.2 (MPL-2.0) supplies incremental MP4, WebM and WAV demuxing and
-WebCodecs video integration. Its source archive and license are included.
+WebCodecs video integration. Its license is included; its unmodified source archive
+is published with the codec sources listed above.
 https://github.com/Vanilagy/mediabunny
 
 `opus-decoder` 0.7.12 and `@wasm-audio-decoders/common` 9.0.7 (MIT) bundle the
