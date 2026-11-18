@@ -1,4 +1,4 @@
-export function attachViewportResize(stage, handle, layout, transport) {
+export function attachViewportResize(stage, handle, layout, transport, viewport = stage.parentElement) {
   let pointer, lastMax, syncFrame;
   const events = new AbortController();
   const on = (type, listener) => handle.addEventListener(type, listener, { signal: events.signal });
@@ -6,12 +6,15 @@ export function attachViewportResize(stage, handle, layout, transport) {
     const style = getComputedStyle(stage.parentElement);
     const width = stage.parentElement.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const aspect = Number(getComputedStyle(stage).getPropertyValue('--video-aspect')) || 2;
+    const viewportStyle = getComputedStyle(viewport);
     const padding = ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth']
-      .reduce((sum, property) => sum + (parseFloat(style[property]) || 0), 0);
+      .reduce((sum, property) => sum + (parseFloat(viewportStyle[property]) || 0), 0);
+    const extra = viewport === stage.parentElement ? 0 : Math.max(0,
+      viewport.getBoundingClientRect().height - stage.parentElement.getBoundingClientRect().height - padding);
     // Keep the transport and a usable portion of settings visible, even after manual resizing.
     const settingsHeight = Math.min(160, layout.clientHeight / 3);
     const available = layout.clientHeight - transport.getBoundingClientRect().height
-      - handle.getBoundingClientRect().height - padding - settingsHeight;
+      - handle.getBoundingClientRect().height - padding - extra - settingsHeight;
     const max = Math.max(1, Math.min(available, width / aspect));
     return { min: Math.min(120, max), max };
   };
@@ -57,7 +60,7 @@ export function attachViewportResize(stage, handle, layout, transport) {
     syncFrame = requestAnimationFrame(() => { syncFrame = undefined; sync(); });
   };
   const observer = new ResizeObserver(scheduleSync);
-  for (const element of [stage, stage.parentElement, layout, transport, handle]) observer.observe(element);
+  for (const element of new Set([stage, stage.parentElement, viewport, layout, transport, handle])) observer.observe(element);
   window.addEventListener('resize', scheduleSync, { signal: events.signal }); sync();
   return () => {
     events.abort(); observer.disconnect();

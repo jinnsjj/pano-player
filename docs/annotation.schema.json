@@ -2,19 +2,36 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PanoPlayer Annotation Overlay v1",
   "type": "object",
-  "required": ["version", "annotations"],
+  "required": ["annotations"],
   "properties": {
-    "version": { "const": 1 },
+    "version": { "const": 1, "default": 1, "description": "Optional format version. Omitted means v1; any explicitly provided value must be 1." },
+    "fps": { "$ref": "#/$defs/fps", "description": "Default annotation sampling rate, independent of video FPS. Required for frame and timestamp samples unless overridden on the item." },
     "annotations": {
       "type": "array",
       "maxItems": 200000,
       "items": {
         "type": "object",
-        "required": ["start", "end"],
+        "oneOf": [
+          {
+            "required": ["start", "end"],
+            "not": { "anyOf": [{ "required": ["timestamp"] }, { "required": ["frame"] }] }
+          },
+          {
+            "required": ["timestamp"],
+            "not": { "anyOf": [{ "required": ["start"] }, { "required": ["end"] }, { "required": ["frame"] }] }
+          },
+          {
+            "required": ["frame"],
+            "not": { "anyOf": [{ "required": ["start"] }, { "required": ["end"] }, { "required": ["timestamp"] }] }
+          }
+        ],
         "properties": {
           "start": { "type": "number", "minimum": 0 },
           "end": { "type": "number", "exclusiveMinimum": 0 },
-          "label": { "type": ["string", "null"], "maxLength": 2000 },
+          "timestamp": { "type": "number", "minimum": 0, "description": "Sample time in video seconds. Displays for [timestamp, timestamp+1/fps). Requires an explicit item/root fps." },
+          "frame": { "type": "integer", "minimum": 0, "maximum": 9007199254740991, "description": "Zero-based annotation frame. Displays for [frame/fps, (frame+1)/fps). Requires an explicit item/root fps." },
+          "fps": { "$ref": "#/$defs/fps", "description": "Overrides the root annotation FPS for this item." },
+          "label": { "type": ["string", "null"], "maxLength": 2000, "description": "Free-form text for a region, point or time interval. Without a shape, a nonblank label is displayed beside the video with the same timing and source filtering." },
           "source": { "type": ["string", "null"], "maxLength": 2000 },
           "bbox": { "$ref": "#/$defs/bbox" },
           "point": { "$ref": "#/$defs/point" }
@@ -23,11 +40,28 @@
           "required": ["bbox", "point"],
           "properties": { "bbox": { "type": "array" }, "point": { "type": "array" } }
         },
-        "$comment": "Runtime additionally checks start < end, positive bbox area, treats blank metadata as absent, and skips drawing entries with no non-null shape."
+        "additionalProperties": true,
+        "$comment": "Runtime normalizes samples to seconds and additionally requires a finite, representable interval with start < end and positive bbox area. Blank metadata is absent; labels without shapes display beside the video; entries with neither shape nor label are skipped. All displayed entries share one half-open timeline and source filtering. Extra per-annotation fields are optional label metadata, individually selectable in Label fields; they do not control visibility or timing."
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "annotations": {
+            "contains": {
+              "anyOf": [{ "required": ["frame"] }, { "required": ["timestamp"] }],
+              "not": { "required": ["fps"] }
+            }
+          }
+        }
+      },
+      "then": { "required": ["fps"] }
+    }
+  ],
   "$defs": {
+    "fps": { "type": "number", "exclusiveMinimum": 0 },
     "coordinate": { "type": "number", "minimum": 0, "maximum": 1 },
     "bbox": { "type": ["array", "null"], "minItems": 4, "maxItems": 4, "items": { "$ref": "#/$defs/coordinate" } },
     "point": { "type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/coordinate" } }

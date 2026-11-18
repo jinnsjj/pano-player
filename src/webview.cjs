@@ -21,8 +21,8 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
   <div class="brand"><img src="${escape(logo || '')}" width="32" height="32" alt="" aria-hidden="true"><strong>PanoPlayer</strong></div>
 </header>
 <main id="player-layout">
-  <div class="viewport">
-    <div id="stage">
+  <div class="viewport" id="playback-viewport">
+    <div class="viewport-main"><div id="stage">
       <canvas id="video" data-title="${escape(title)}" data-defaults="${escape(JSON.stringify(defaults))}" data-preferences="${escape(JSON.stringify(normalize(preferences)))}" data-plugins="${escape(JSON.stringify(plugins))}" data-host="${hostMedia ? '1' : '0'}" data-session="${mediaSession ? '1' : '0'}" data-source="${escape(source || '')}" data-decoder="${escape(decoder || '')}" data-pcm="${escape(pcm || '')}" data-worker="${escape(worker || '')}" data-worklet="${escape(worklet || '')}" data-view="${escape(view || '')}" aria-label="Panorama video"></canvas>
       <canvas id="projected" aria-label="Single-eye panorama" hidden></canvas>
       <canvas id="overlay" width="140" height="70" aria-label="FOA direction heatmap"></canvas>
@@ -31,7 +31,8 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
       <div id="spatial" tabindex="0" role="region" aria-label="Perspective view; drag or use arrow keys to look, plus and minus to zoom, Home to reset" hidden></div>
       <div id="center-marker" role="group" aria-label="View center" hidden><i data-lucide="plus" aria-hidden="true"></i><output id="center-angles" aria-label="Center azimuth and elevation" aria-live="off"></output></div>
       <div id="empty"><i data-lucide="film" aria-hidden="true"></i><span id="status" role="status">Loading media</span><button id="retry" hidden>Retry</button></div>
-    </div>
+    </div></div>
+    <aside id="plugin-sidebar" aria-label="Playback annotations" tabindex="0"></aside>
   </div>
   <div id="viewport-resize" role="separator" aria-orientation="horizontal" aria-label="Playback area height" aria-controls="stage" title="Resize playback area" tabindex="0"></div>
   <div id="transport" role="group" aria-label="Playback controls">
@@ -48,6 +49,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
       <output id="loop-time" aria-label="Loop range" aria-live="off"></output>
     </div>
     <button id="loop-toggle" title="Loop entire media" aria-label="Loop entire media" aria-pressed="false" disabled><i data-lucide="repeat-2" aria-hidden="true"></i></button>
+    <button id="copy-time" title="Copy path and time" aria-label="Copy path and time" disabled${hostMedia && /\.(mp4|webm|mov|mkv)$/i.test(title) ? '' : ' hidden'}><i data-lucide="copy" aria-hidden="true"></i></button>
     <div class="volume-controls"><button id="mute" title="Mute" aria-label="Mute" disabled><i data-lucide="volume-2" aria-hidden="true"></i></button><input id="volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume"><output id="volume-value" aria-hidden="true">100%</output></div>
     <div id="view-options">
         <div role="tablist" aria-label="View mode">
@@ -115,7 +117,7 @@ function renderHtml({ title, cspSource, script, style, icons, logo, omnitone, mo
       <output id="mapper-warning" role="status" hidden>Summed inputs may clip.</output>
     </section>
   </div>
-  <footer><span id="detail" role="status">Loading media information</span></footer>
+  <footer><span id="detail" role="status">Loading media information</span><output id="copy-status" role="status" hidden></output></footer>
   <section class="floating-overlay" id="meter-overlay" role="dialog" aria-labelledby="meter-heading" tabindex="-1" hidden>
     <div class="floating-titlebar" id="meter-titlebar" tabindex="0" title="Drag or use arrow keys to move meters">
       <h2 id="meter-heading"><i data-lucide="audio-lines" aria-hidden="true"></i>Output Meters</h2>

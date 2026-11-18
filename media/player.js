@@ -21,7 +21,7 @@ import { attachFileDrop } from './file-drop.js';
     url: $('video').dataset.source, file: hostApi.file }]]);
   const api = { file: hostApi.file, setState: value => hostApi.setState(value), postMessage: value => hostApi.postMessage(value),
     mediaSourceId: url => [...sources.values()].find(source => source.url === url)?.id };
-  const disposeViewportResize = attachViewportResize($('stage'), $('viewport-resize'), $('player-layout'), $('transport'));
+  const disposeViewportResize = attachViewportResize($('stage'), $('viewport-resize'), $('player-layout'), $('transport'), $('playback-viewport'));
   const video = new window.StreamPlayer($('video'), api); const canvas = $('overlay');
   attachEnvelope(video, $('seek-envelope'));
   const loop = attachLoopRange(video, { seek: $('seek'), track: $('seek-track'), selection: $('loop-selection'),
@@ -45,6 +45,7 @@ import { attachFileDrop } from './file-drop.js';
   let audioSource = 'primary', switchRequest = 0;
   let sessionReceived = false, pluginsReady;
   const mediaSession = crypto.randomUUID();
+  let copyRequest = 0, copyTimer;
   const audioProbes = new Set();
   const mapper = new ChannelMapper(() => monitor, () => { lastMap = null; clear(); });
   const audioSwitcher = new AudioSwitcher(video, api, {
@@ -57,7 +58,7 @@ import { attachFileDrop } from './file-drop.js';
     },
   });
   let hasVideo = true; let sourceAspect = 2; let mediaDetail = 'Native media';
-  const plugins = new PlayerPlugins({ getState: pluginState, getView: () => view, stage: $('stage'), panels: $('plugin-panels'), overlays: $('overlay-options'),
+  const plugins = new PlayerPlugins({ getState: pluginState, getView: () => view, stage: $('stage'), panels: $('plugin-panels'), overlays: $('overlay-options'), sidebar: $('plugin-sidebar'),
     selectJsonFile: hostApi.openFiles ? undefined : () => fileInputs.selectJsonFile(),
     projectionUrl: video.dataset.view, icons, onError(message) { $('plugin-status').textContent = message; $('plugin-status').hidden = false; } });
   function pluginState() {
@@ -195,7 +196,23 @@ import { attachFileDrop } from './file-drop.js';
     $('seek').value = video.currentTime;
     $('seek').max = Number.isFinite(video.duration) ? video.duration : 0;
     $('seek').disabled = !Number.isFinite(video.duration) || video.duration <= 0;
+    $('copy-time').disabled = !ready || !!video.error || $('seek').disabled || !!copyTimer;
   }
+  function copyStatus(message) {
+    $('copy-status').textContent = message; $('copy-status').hidden = false;
+  }
+  $('copy-time').addEventListener('click', () => {
+    if (disposed || $('copy-time').hidden || $('copy-time').disabled) return;
+    const range = loop.getState().range;
+    const playback = range ? { loop: range } : { time: video.currentTime };
+    const id = ++copyRequest;
+    copyTimer = setTimeout(() => {
+      copyTimer = undefined; copyRequest++; transport();
+      copyStatus('Copy timed out. Try again.');
+    }, 10000);
+    transport(); copyStatus('Copying path and time...');
+    api.postMessage({ type: 'copy-media-time', session: mediaSession, id, playback });
+  });
   function updateClock() {
     transport();
     updateDetail();
@@ -309,6 +326,7 @@ import { attachFileDrop } from './file-drop.js';
     $('audio-track').disabled = $('audio-open').disabled = true;
     const message = 'Playback failed: ' + (video.error?.message || 'codec or resource unavailable');
     $('empty').hidden = false; $('status').textContent = message; $('retry').hidden = false;
+    transport();
     diagnostic(message);
   }
   video.addEventListener('error', mediaError);
@@ -520,6 +538,10 @@ import { attachFileDrop } from './file-drop.js';
         if (!disposed) { $('audio-switch-status').hidden = false; $('audio-switch-status').textContent = error.message; }
       });
     }
+    if (data?.type === 'media-time-copied' && data.session === mediaSession && data.id === copyRequest && copyTimer) {
+      clearTimeout(copyTimer); copyTimer = undefined; transport();
+      copyStatus(data.error ? 'Copy failed: ' + data.error : 'Copied path and time to clipboard.');
+    }
     if (data?.type === 'session-annotation' && data.session === mediaSession) void loadSessionAnnotation(data);
     if (data?.type === 'audio-source' && data.source?.id && data.source.id !== 'primary') {
       sources.set(data.source.id, { ...sources.get(data.source.id), ...data.source });
@@ -533,6 +555,7 @@ import { attachFileDrop } from './file-drop.js';
   function dispose() {
     if (disposed) return;
     disposed = true; audioSwitcher.cancel(); loop.dispose(); disposeViewportResize(); fileInputs.dispose(); projectionRequest++;
+    clearTimeout(copyTimer);
     resolvePlaybackReady();
     for (const probe of audioProbes) probe.dispose();
     audioProbes.clear();

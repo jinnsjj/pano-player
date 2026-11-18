@@ -126,7 +126,7 @@ function setup(load) {
       append(...items) { for (const item of items) { item.parent = this; this.children.push(item); } },
       insertBefore(item) { this.append(item); }, remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); } };
   }
-  const stage = element(), panels = element(), overlays = element(), overlayToolbar = element(), head = element(), errors = [], layers = new Map();
+  const stage = element(), panels = element(), overlays = element(), sidebar = element(), overlayToolbar = element(), head = element(), errors = [], layers = new Map();
   overlays.querySelector = () => overlayToolbar;
   const view = { setOverlayLayer(id, canvas, visible) { layers.set(id, { canvas, visible }); }, removeOverlayLayer: id => layers.delete(id) };
   let state = { time: 0, hasVideo: true, width: 720, height: 720, projection: '180', layout: 'mono', rotation: 0, viewMode: 'flat' };
@@ -137,12 +137,34 @@ function setup(load) {
       configure(...args) { this.settings = args; } render() {} dispose() { this.disposed = true; }
     } } };
   const { PlayerPlugins } = moduleFor('../media/plugins.js', globals);
-  const runtime = new PlayerPlugins({ getState: () => ({ ...state }), getView: () => view, stage, panels, overlays,
+  const runtime = new PlayerPlugins({ getState: () => ({ ...state }), getView: () => view, stage, panels, overlays, sidebar,
     projectionUrl: 'http://localhost/media/view.js', icons() {}, onError: text => errors.push(text), load });
-  return { runtime, stage, panels, overlays, overlayToolbar, head, view, layers, errors, projections, state, element,
+  return { runtime, stage, panels, overlays, sidebar, overlayToolbar, head, view, layers, errors, projections, state, element,
     frame(patch = {}) { state = { ...state, ...patch }; runtime.frame(); } };
 }
 const flush = () => new Promise(setImmediate);
+
+test('sidebar panels are owned, initially hidden, and cleaned up on unload or activation failure', async () => {
+  let panel, api;
+  const s = setup(async () => ({ activate(value) {
+    api = value; panel = api.createPanel({ title: 'Live notes', placement: 'sidebar' });
+  } }));
+  await s.runtime.sync([sample()]);
+  assert.equal(s.sidebar.children[0], panel); assert.equal(panel.hidden, true);
+  assert.equal(panel.getAttribute('aria-label'), 'Live notes');
+  assert.equal(s.panels.children.length, 0); assert.equal(s.overlays.children.length, 0);
+  assert.throws(() => api.showPanel(panel), /owned overlay/);
+  assert.throws(() => api.createPanel({ title: 'Invalid', placement: 'sidebar', toggle: { type: 'checkbox' } }), /toggle/);
+  assert.throws(() => api.createPanel({ title: 'Invalid', placement: 'sidebar', actions: [s.element('button')] }), /actions/);
+  panel.hidden = false; s.runtime.sync([]); assert.equal(s.sidebar.children.length, 0);
+  s.runtime.dispose();
+  const failed = setup(async () => ({ activate(value) {
+    value.createPanel({ title: 'Temporary', placement: 'sidebar' }); throw new Error('Activation failed');
+  } }));
+  await failed.runtime.sync([sample()]);
+  assert.equal(failed.sidebar.children.length, 0); assert.equal(failed.runtime.snapshot()[0].status, 'error');
+  failed.runtime.dispose();
+});
 
 test('overlay modules expand inline, remain separate from normal settings panels and clean up on unload', async () => {
   let body;

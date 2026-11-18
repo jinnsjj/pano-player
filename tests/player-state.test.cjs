@@ -8,7 +8,7 @@ const routingModule = { exports: {} };
 vm.runInNewContext(buildSync({ entryPoints: [require.resolve('../media/channel-routing.js')], bundle: true,
   write: false, format: 'cjs' }).outputFiles[0].text, { module: routingModule, exports: routingModule.exports });
 const { createRouting, copyRouting, validRouting } = routingModule.exports;
-function setup(saved = {}, { audioSources = {}, mediaSession = false, primaryReady = true } = {}) {
+function setup(saved = {}, { audioSources = {}, mediaSession = false, primaryReady = true, hostMedia = true } = {}) {
   let persisted, onMap, onError, frame;
   const elements = new Map(), messages = [], listeners = {}, sourceSessions = [];
   const get = id => {
@@ -21,7 +21,7 @@ function setup(saved = {}, { audioSources = {}, mediaSession = false, primaryRea
       width: 2048, height: 1024, clientHeight: 800,
       getContext: () => ({ clearRect() {}, putImageData() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, strokeText() {}, fillText() {} }),
       attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, getAttribute(name) { return this.attributes[name]; }, removeAttribute() {}, load() {}, render() {},
-      parentElement: { clientWidth: 1280 },
+      parentElement: { clientWidth: 1280, getBoundingClientRect: () => ({ height: 148 }) },
       querySelectorAll() { return []; }, focus() {},
       showPopover() { this.popoverOpen = true; this.fire('toggle'); }, hidePopover() { this.popoverOpen = false; this.fire('toggle'); },
       matches(selector) { return selector === ':popover-open' && Boolean(this.popoverOpen); },
@@ -34,6 +34,7 @@ function setup(saved = {}, { audioSources = {}, mediaSession = false, primaryRea
     });
     return elements.get(id);
   };
+  get('copy-time').disabled = true; get('copy-time').hidden = !hostMedia;
   const window = { innerWidth: 1280, innerHeight: 800, addEventListener(type, fn) { listeners[type] = fn; } };
   window.StreamPlayer = class {
     constructor(element, options) {
@@ -141,6 +142,43 @@ test('range loop shares transport seek/reset events without persisting transient
   assert.equal(s.persisted().loop, undefined);
   s.get('loop-toggle').fire('click'); assert.equal(s.state().loop.range, null); assert.equal(s.state().loop.enabled, false);
   assert.equal(video.currentTime, 9); assert.equal(video.paused, false);
+});
+
+test('copy snapshots a point or selected range without changing playback, selection or preferences', () => {
+  const s = setup(), video = s.get('video'), button = s.get('copy-time');
+  video.currentTime = 3.125; video.paused = false;
+  assert.equal(button.disabled, false);
+  button.fire('click');
+  let request = s.messages.findLast(message => message.type === 'copy-media-time');
+  assert.equal(request.playback.time, 3.125); assert.equal(request.playback.loop, undefined);
+  assert.equal(video.currentTime, 3.125); assert.equal(video.paused, false); assert.equal(button.disabled, true);
+  const count = s.messages.length; button.fire('click'); assert.equal(s.messages.length, count);
+  s.message({ type: 'media-time-copied', session: 'stale', id: request.id }); assert.equal(button.disabled, true);
+  s.message({ type: 'media-time-copied', session: request.session, id: request.id + 1 }); assert.equal(button.disabled, true);
+  s.message({ type: 'media-time-copied', session: request.session, id: request.id });
+  assert.equal(button.disabled, false); assert.match(s.get('copy-status').textContent, /Copied/);
+  s.get('loop-toggle').fire('click');
+  s.get('loop-start').fire('keydown', { key: 'ArrowRight', shiftKey: true, preventDefault() {} });
+  s.get('loop-end').fire('keydown', { key: 'ArrowLeft', shiftKey: true, preventDefault() {} });
+  video.currentTime = 5; const before = JSON.stringify(s.state());
+  button.fire('click'); request = s.messages.findLast(message => message.type === 'copy-media-time');
+  assert.equal(request.playback.time, undefined); assert.equal(request.playback.loop.start, 1); assert.equal(request.playback.loop.end, 9);
+  assert.equal(JSON.stringify(s.state()), before); assert.equal(s.persisted(), undefined);
+  s.message({ type: 'media-time-copied', session: request.session, id: request.id, error: 'Clipboard unavailable' });
+  assert.match(s.get('copy-status').textContent, /Copy failed: Clipboard unavailable/); assert.equal(button.disabled, false);
+  s.get('loop-toggle').fire('click'); button.fire('click');
+  request = s.messages.findLast(message => message.type === 'copy-media-time');
+  assert.equal(request.playback.time, 5); assert.equal(request.playback.loop, undefined); s.dispose();
+});
+
+test('copy is unavailable before readiness, on media errors and for the browser host', () => {
+  for (const options of [{ primaryReady: false }, { hostMedia: false }]) {
+    const s = setup({}, options); s.get('copy-time').fire('click');
+    assert.equal(s.messages.some(message => message.type === 'copy-media-time'), false); s.dispose();
+  }
+  const s = setup(); s.get('video').error = new Error('Decode failed'); s.get('video').fire('error');
+  assert.equal(s.get('copy-time').disabled, true); s.get('copy-time').fire('click');
+  assert.equal(s.messages.some(message => message.type === 'copy-media-time'), false); s.dispose();
 });
 test('center marker toggles, persists across views and resets without changing playback', () => {
   const s = setup(), video = s.get('video');

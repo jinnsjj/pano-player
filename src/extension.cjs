@@ -6,6 +6,7 @@ const { renderHtml } = require('./webview.cjs');
 const { hostFile } = require('./host-file.cjs');
 const { readDroppedJson } = require('./dropped-json.cjs');
 const { readMediaManifest } = require('./media-manifest.cjs');
+const { formatMediaTime } = require('./copy-media-time.cjs');
 const { normalize } = require('./preferences.cjs');
 const { openEditorMedia, mediaEditorType } = require('./editor-media.cjs');
 const { createPluginRegistry } = require('./plugin-registry.cjs');
@@ -52,6 +53,11 @@ function activate(context) {
         plugins: plugins.descriptors(panel.webview),
       });
       const media = hostFile(mediaUri.fsPath, message => panel.webview.postMessage(message));
+      const videoStreams = new Map();
+      const closeVideoStream = entry => {
+        if (videoStreams.get(entry.session) === entry) videoStreams.delete(entry.session);
+        entry.abort.abort(); entry.stream?.dispose();
+      };
       const audioFiles = new Map();
       const addAudio = uri => {
         let entry = [...audioFiles.values()].find(item => item.uri.toString() === uri.toString());
@@ -63,8 +69,76 @@ function activate(context) {
         return { id: entry.id, name: path.basename(uri.fsPath), url: 'pano-audio:' + entry.id };
       };
       const sessionSources = document.manifest?.audioPaths.map(filename => addAudio(resourceUri(filename))) || [];
-      let disposed = false, selectingAudio = false, selectingJson = false, readingDrops = 0, playerSession;
+      let disposed = false, selectingAudio = false, selectingJson = false, copyingTime = false, readingDrops = 0, playerSession;
       const receive = panel.webview.onDidReceiveMessage(message => {
+        if (['open-video-stream', 'read-video-stream', 'close-video-stream'].includes(message?.type)) {
+          if (disposed || typeof message.session !== 'string' || !message.session || message.session.length > 64) return;
+          const entry = videoStreams.get(message.session);
+          if (message.type === 'close-video-stream') {
+            if (entry && (message.streamId === undefined || entry.id === message.streamId)) closeVideoStream(entry);
+            return;
+          }
+          if (disposed || !Number.isSafeInteger(message.id) || message.id < 1 ||
+            typeof message.session !== 'string' || !message.session || message.session.length > 64) return;
+          const response = { type: 'video-stream', session: message.session, id: message.id };
+          if (message.type === 'read-video-stream') {
+            if (!entry?.stream || entry.id !== message.streamId || entry.reading) {
+              void panel.webview.postMessage({ ...response, error: 'Invalid system video stream read.' }); return;
+            }
+            entry.reading = true;
+            void entry.stream.read().then(chunk => {
+              if (!disposed && videoStreams.get(entry.session) === entry) {
+                void panel.webview.postMessage({ ...response, streamId: entry.id, ...chunk });
+                if (chunk.eof) closeVideoStream(entry);
+              }
+            }).catch(error => {
+              if (!disposed && videoStreams.get(entry.session) === entry) {
+                void panel.webview.postMessage({ ...response, error: error.message }); closeVideoStream(entry);
+              }
+            }).finally(() => { entry.reading = false; });
+            return;
+          }
+          if (vscode.workspace?.isTrusted !== true || videoStreams.size >= 4 || entry) {
+            void panel.webview.postMessage({ ...response, error: 'System video requires a trusted workspace and an available decoder.' });
+            return;
+          }
+          const opening = { session: message.session, id: randomBytes(16).toString('hex'), abort: new AbortController() };
+          videoStreams.set(opening.session, opening);
+          void (async () => {
+            try {
+              const { openVideoStream } = require('./video-proxy.cjs');
+              const stream = await openVideoStream(mediaUri.fsPath, { signal: opening.abort.signal,
+                time: message.time, width: message.width, height: message.height });
+              if (disposed || opening.abort.signal.aborted) { stream.dispose(); return; }
+              opening.stream = stream;
+              await panel.webview.postMessage({ ...response, streamId: opening.id, backend: stream.backend });
+            } catch (error) {
+              if (!disposed && !opening.abort.signal.aborted) void panel.webview.postMessage({ ...response, error: error?.message || String(error) });
+              closeVideoStream(opening);
+            }
+          })();
+          return;
+        }
+        if (message?.type === 'copy-media-time') {
+          if (disposed || !Number.isSafeInteger(message.id) || message.id < 1 ||
+            typeof message.session !== 'string' || !message.session || message.session.length > 64) return;
+          const response = { type: 'media-time-copied', session: message.session, id: message.id };
+          if (copyingTime) {
+            void panel.webview.postMessage({ ...response, error: 'A copy is already in progress.' });
+            return;
+          }
+          copyingTime = true;
+          void (async () => {
+            try {
+              // The opened document owns the path, including JSONPP sessions and Remote workspaces.
+              await vscode.env.clipboard.writeText(formatMediaTime(document.uri.fsPath, message.playback));
+              if (!disposed) await panel.webview.postMessage(response);
+            } catch (error) {
+              if (!disposed) void panel.webview.postMessage({ ...response, error: error?.message || String(error) });
+            } finally { copyingTime = false; }
+          })();
+          return;
+        }
         if (message?.type === 'player-ready' && document.manifest && !disposed) {
           if (typeof message.session !== 'string' || !message.session || message.session.length > 64 || message.session === playerSession) return;
           const session = playerSession = message.session;
@@ -178,6 +252,7 @@ function activate(context) {
       });
       panel.onDidDispose(() => {
         disposed = true; selectingJson = false; media.dispose();
+        for (const entry of videoStreams.values()) closeVideoStream(entry);
         for (const entry of audioFiles.values()) entry.file.dispose();
         audioFiles.clear(); receive.dispose(); visibility.dispose();
       });

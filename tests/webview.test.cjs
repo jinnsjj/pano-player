@@ -123,9 +123,22 @@ test('timeline exposes an accessible range loop without replacing the native see
   assert.doesNotMatch(html, /id="loop-clear"/);
   assert.match(html, /id="loop-time" aria-label="Loop range" aria-live="off"/);
 });
+test('copy path and time is an icon control beside looping, shown only for host-backed videos', () => {
+  const button = options => renderHtml(options).match(/<button id="copy-time"[^>]*>.*?<\/button>/)[0];
+  const options = { title: 'video.mp4', hostMedia: true };
+  assert.match(button(options), /title="Copy path and time" aria-label="Copy path and time" disabled>/);
+  assert.match(button(options), /data-lucide="copy"/);
+  for (const extra of [{ hostMedia: false }, { title: 'audio.wav' }]) assert.match(button({ ...options, ...extra }), / hidden>/);
+  const html = renderHtml(options);
+  assert.ok(html.indexOf('id="loop-toggle"') < html.indexOf('id="copy-time"'));
+  assert.ok(html.indexOf('id="copy-time"') < html.indexOf('class="volume-controls"'));
+  assert.match(html, /id="copy-status" role="status" hidden/);
+});
 test('both player hosts expose only generic optional plugin slots', () => {
   const html = renderHtml({ title: 'plugins.mp4' });
   assert.match(html, /id="plugin-panels"/);
+  assert.match(html, /<aside id="plugin-sidebar" aria-label="Playback annotations" tabindex="0"><\/aside>/);
+  assert.ok(html.indexOf('id="plugin-sidebar"') < html.indexOf('id="transport"'));
   assert.match(html, /id="plugin-status" role="status" hidden/);
   assert.match(html, /data-plugins="\[\]"/);
   const configured = renderHtml({ title: 'plugins.mp4', plugins: [{ id: 'test.example', name: '<unsafe>' }] });

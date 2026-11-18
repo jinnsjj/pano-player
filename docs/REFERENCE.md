@@ -10,7 +10,7 @@ or run `code --install-extension shijunjie.pano-player`. For a local package, us
 
 Open media with **Open With > PanoPlayer** or **PanoPlayer: Open Media**.
 Requires VS Code 1.84+, a Node workspace extension host, Web Audio and WebCodecs.
-Perspective, EAC, rotation and single-eye cropping require WebGL2. No external FFmpeg or Python is needed.
+Perspective, EAC, rotation and single-eye cropping require WebGL2. Bundled decoding needs no external FFmpeg or Python; optional macOS host FFmpeg enables live system-assisted HEVC playback below.
 
 To use PanoPlayer by default for MP4 and WebM, add these associations to your settings:
 
@@ -149,13 +149,34 @@ WASM and video decoding. Browser-only vscode.dev without a remote host is unsupp
 Source media is not modified or uploaded to a third-party service.
 
 HEVC video uses native WebCodecs when the environment supports the file's
-configuration. Otherwise, the player loads its bundled FFmpeg/WASM HEVC decoder;
-this also works in VS Code webviews without native HEVC. Main and Main 10 retain
-their decoded YUV precision. Software decoding is not guaranteed to reach real
+configuration. For Main 8-bit SDR on a trusted macOS workspace host, an installed
+FFmpeg can instead use VideoToolbox to decode HEVC and hardware-encode a live H.264
+stream for WebCodecs. This is system hardware decoding plus a lossy video transport,
+not direct zero-copy HEVC presentation. Fragmented MP4 is consumed incrementally;
+there is no whole-file preparation or video cache. The sequential video buffer is
+bounded to 8 MiB, and demand-driven reads apply backpressure to the native process.
+Seeking aborts the old stream and starts a new decoder at the original timestamp.
+Source audio, tracks, timestamps, orientation and annotation coordinates are not
+converted. The display bridge is limited to 4096 pixels per dimension, preserving
+aspect ratio. Main 10 and HDR skip this conversion. No media is uploaded, no server
+is started, and original files are never overwritten. Closing an editor cancels
+its native decoder. The standalone web player never runs host FFmpeg.
+
+If native streaming is unavailable or fails to open, the player loads its bundled
+FFmpeg/WASM HEVC decoder. Main and Main 10 retain their decoded YUV precision on
+this path. Software decoding is not guaranteed to reach real
 time for large frames or high frame rates; the PCM clock buffers with slow
 video instead of letting audio run ahead. The information footer shows video
 codec, video decoder backend, and the currently selected audio codec. Hover the
 footer for the complete codec strings.
+
+For a production-bundle VS Code playback check, run `node build.cjs`, then
+`node tests/playback-performance.cjs /absolute/path/to/video.mp4`. The harness
+requires real-time media progress and at least 27 presented frames/s by default
+(for a 30 fps input), verifies the audio clock and records stalls and decoder
+backend. Set `PANO_PLAYBACK_MIN_FPS` for lower-frame-rate sources.
+Set `PANO_PLAYBACK_MAX_FIRST_FRAME_MS=3000` to require prompt startup without a
+whole-file conversion, and `PANO_PLAYBACK_INTERACTIONS=1` to check seek and pause.
 
 ## Development
 

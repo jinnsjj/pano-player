@@ -43,7 +43,7 @@ test('extension package includes only explicitly allowed runtime and documentati
   for (const name of require('../public-assets.cjs').media) {
     assert.ok(rules.includes('!media/' + name) || (name.startsWith('LICENSE-') && rules.includes('!media/LICENSE-*.txt')), name);
   }
-  for (const name of ['extension', 'webview', 'preferences', 'host-file', 'dropped-json', 'editor-media', 'plugin-registry']) {
+  for (const name of ['extension', 'webview', 'preferences', 'host-file', 'video-proxy', 'dropped-json', 'copy-media-time', 'editor-media', 'plugin-registry']) {
     assert.ok(rules.includes(`!src/${name}.cjs`));
   }
   assert.ok(rules.includes('!plugins/catalog.cjs'));

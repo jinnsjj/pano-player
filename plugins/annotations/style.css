@@ -6,7 +6,19 @@
 #annotation-sources:empty { display: none; }
 #annotation-sources .annotation-source { overflow-wrap: anywhere; }
 .annotation-source > span:last-child { min-width: 0; }
+#annotation-fields { min-width: 0; margin: 6px 0 0; padding: 0; border: 0; }
+#annotation-fields legend { margin-bottom: 4px; padding: 0; font-size: 12px; color: var(--muted); }
+#annotation-field-options { display: flex; flex-wrap: wrap; gap: 2px 16px; }
+#annotation-field-options .annotation-field { min-width: 0; max-width: 100%; }
+.annotation-field > span { min-width: 0; overflow-wrap: anywhere; }
+#annotation-fields:disabled { opacity: .6; }
 .annotation-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+#annotation-global-list { list-style: none; margin: 0; padding: 0; }
+#annotation-global-list li { display: flex; align-items: flex-start; gap: 8px; padding-block: 10px; border-top: 1px solid #383c40; }
+#annotation-global-list li:first-child { padding-top: 0; border-top: 0; }
+#annotation-global-list .annotation-swatch { margin-top: 5px; }
+#annotation-global-list li > div { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.annotation-global-source { display: block; margin-top: 4px; color: #aeb4bb; font-size: 12px; }
 #annotation-status { display: block; color: var(--map-accent); font-size: 12px; overflow-wrap: anywhere; }
 #annotation-format { margin-top: 4px; max-width: 820px; }
 #annotation-format summary { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; cursor: pointer; list-style: none; color: var(--muted); }

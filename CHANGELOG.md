@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.47 - 2026-11-14
+
+### Added
+
+- Select custom annotation fields individually in Label fields and append their JSON values to region, point and sidebar labels. Preserve false, zero, null and empty values without changing annotation visibility; keep extra fields hidden by default.
+
+## 0.4.46 - 2026-11-13
+
+### Improved
+
+- Allow annotation JSON to omit `version`, defaulting to v1. Continue rejecting explicitly invalid or unsupported versions; keep timing, FPS and per-entry validation unchanged.
+
+## 0.4.45 - 2026-11-13
+
+### Added
+
+- Accept annotation samples with second-based `timestamp` or zero-based `frame`, both requiring explicit annotation `fps` and displaying one sampling period. Support root FPS defaults and per-item overrides while preserving existing `start/end` intervals, source filtering and import rollback.
+
+### Fixed
+
+- Skip invalid annotation entries instead of rejecting valid entries in the same file. Report loaded/skipped counts and bounded errors with original entry numbers; retain the previous file on file-level failures or when every entry is invalid. Keep conversion validation strict.
+
+## 0.4.44 - 2026-11-11
+
+### Improved
+
+- Smooth HEVC Main SDR playback on macOS with live VideoToolbox hardware decoding and H.264 transport when native WebCodecs HEVC is unavailable and host FFmpeg is installed. Begin from streamed video fragments without preparing or storing a whole-file cache.
+- Keep original audio samples, channel layouts, track switching and media timestamps separate from the live video bridge. Preserve annotation coordinates and source metadata; cap bridge dimensions at 4096 while retaining aspect ratio.
+- Restart live decoding at the selected timestamp on seek, bound memory with backpressure, and cancel decoder processes on close. Untrusted workspaces and unsupported hosts retain bundled WASM decoding; Main 10 and HDR stay on the precision-preserving path.
+
+## 0.4.43 - 2026-11-10
+
+### Added
+
+- Copy the opened JSONPP configuration or video path together with the current playback time or selected loop range, in seconds with millisecond precision, without changing files or playback.
+- Display timed text annotations without a region or point beside the video, or below it on narrow screens, using the existing timeline, visibility and source filters.
+
 ## 0.4.42 - 2026-11-04
 
 ### Added

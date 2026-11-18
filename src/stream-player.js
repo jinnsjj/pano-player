@@ -2,11 +2,13 @@ import { serveResource } from './resource-fetch.js';
 import { createHostFetch } from './host-fetch.js';
 import { loadWorklet } from './audio-worklet.js';
 import { copyRouting, validRouting } from '../media/channel-routing.js';
+import { fetchVideoStream } from './video-proxy.js';
 
 export class StreamPlayer extends EventTarget {
   constructor(element, api) {
     super(); this.element = element; this.dataset = element.dataset;
     this.file = api?.file;
+    this.api = api;
     this.audioOnly = Boolean(api?.audioOnly);
     this.deferEnvelope = Boolean(api?.deferEnvelope);
     this.audioTrackIndex = api?.audioTrackIndex;
@@ -14,7 +16,17 @@ export class StreamPlayer extends EventTarget {
     this.videoWidth = 0; this.videoHeight = 0; this.frames = 0; this.dropped = 0;
     this.previewFrame = true;
     this.abort = new AbortController();
-    this.fetchResource = api && this.dataset.host === '1' ? createHostFetch(api, this.dataset.source, this.abort.signal) : fetch;
+    const fetchHost = api && this.dataset.host === '1' ? createHostFetch(api, this.dataset.source, this.abort.signal) : fetch;
+    this.fetchResource = (url, init = {}) => {
+      if (api && this.dataset.host === '1' && String(url).startsWith('pano-native:')) {
+        const request = new URL(url);
+        if (request.pathname !== 'video') throw new Error('Invalid system video resource.');
+        return fetchVideoStream(api, Number(request.searchParams.get('time')),
+          { codedWidth: Number(request.searchParams.get('width')), codedHeight: Number(request.searchParams.get('height')) },
+          init.signal || this.abort.signal);
+      }
+      return fetchHost(url, init);
+    };
     this.metadata = new Promise((resolve, reject) => { this.metadataReady = resolve; this.metadataError = reject; });
     this.metadata.catch(() => {});
     this.load();
@@ -40,6 +52,7 @@ export class StreamPlayer extends EventTarget {
       this.worker.onmessage = ({ data }) => this.receive(data);
       this.worker.postMessage({ type: 'open', url: this.dataset.source, file: this.file,
         audioOnly: this.audioOnly,
+        hostVideo: Boolean(this.api && this.dataset.host === '1' && !this.audioOnly),
         epoch: this.epoch, audioTrackIndex: this.audioTrackIndex, time: this.time,
         hevc: new URL('libav-6.10.7.1.5-decoder-hevc.js', this.dataset.decoder).href,
         libav: new URL('libav-6.10.7.1.5-decoder-aac.js', this.dataset.decoder).href });
@@ -70,6 +83,10 @@ export class StreamPlayer extends EventTarget {
     this.envelopeAbort?.abort(); this.envelope = undefined; this.emit('envelope');
   }
   receive(data) {
+    if (data.type === 'video-native-unavailable') {
+      this.api?.postMessage({ type: 'diagnostic', text: 'System video decoder unavailable: ' + data.message });
+      return;
+    }
     if (data.type === 'fetch') {
       if (this.disposed) { data.port.close(); return; }
       void serveResource(data.port, data.url, data.init, this.abort.signal, this.fetchResource); return;
@@ -83,8 +100,9 @@ export class StreamPlayer extends EventTarget {
       this.audioCodecString = data.audioCodecString;
       this.videoCodec = data.videoCodec; this.videoCodecString = data.videoCodecString;
       this.videoDecoder = data.videoDecoder;
+      this.videoLive = Boolean(data.videoLive);
       this.videoWidth = data.width; this.videoHeight = data.height;
-      this.element.width = Math.max(1, data.width); this.element.height = Math.max(1, data.height);
+      this.element.width = Math.max(1, data.renderWidth || data.width); this.element.height = Math.max(1, data.renderHeight || data.height);
       this.codec = data.codec; this.readyState = 1; this.metadataReady(); this.emit('loadedmetadata');
       this.requestVideo();
       if (!this.deferEnvelope) try { this.startEnvelope(); } catch { this.clearEnvelope(); }
@@ -160,7 +178,7 @@ export class StreamPlayer extends EventTarget {
     this.emit('timeupdate');
   }
   updateVideoBuffering() {
-    if (this.videoDecoder !== 'FFmpeg/WASM' || this.audioOnly) return;
+    if ((this.videoDecoder !== 'FFmpeg/WASM' && !this.videoLive) || this.audioOnly) return;
     const waiting = this.previewFrame || (!this.videoEnded && this.videoEndTime !== undefined &&
       this.time > this.videoEndTime + .08);
     const session = this.audioSession ?? this;

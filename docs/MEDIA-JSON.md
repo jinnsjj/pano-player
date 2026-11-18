@@ -12,6 +12,15 @@ documents unless you explicitly choose **Open With > PanoPlayer**. Use
 user editor associations take precedence over the extension's default. This
 also applies when the extension is installed on a VS Code Remote workspace host.
 
+The **Copy path and time** button beside the loop control copies the opened
+configuration's absolute path (not its referenced video path), followed by the
+current position, for example `time: 12.340 s`. When a loop range is selected,
+it copies `range: 12.340 - 20.000 s` instead, regardless of the playhead position.
+Opening a video directly copies that video's absolute path. Times are seconds
+with millisecond precision. This is plain clipboard text, not a new JSONPP
+configuration; no source files or playback state are changed. The button requires
+the VS Code extension and a video file; browser-local files have no host path.
+
 ```json
 {
   "version": 1,

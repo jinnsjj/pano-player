@@ -15,7 +15,7 @@ const sources = [
   'src/loudness-meter.js',
   'src/level-meter-processor.js',
 ];
-const host = ['extension', 'webview', 'host-file', 'dropped-json', 'media-manifest', 'preferences', 'editor-media', 'plugin-registry']
+const host = ['extension', 'webview', 'host-file', 'video-proxy', 'dropped-json', 'media-manifest', 'copy-media-time', 'preferences', 'editor-media', 'plugin-registry']
   .map(name => `src/${name}.cjs`);
 const docs = ['REFERENCE.md', 'PLUGINS.md', 'ANNOTATIONS.md', 'annotation.schema.json', 'MEDIA-JSON.md', 'WEB.md']
   .map(name => `docs/${name}`);

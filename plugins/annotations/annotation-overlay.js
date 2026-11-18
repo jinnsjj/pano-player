@@ -11,7 +11,19 @@ function fitText(ctx, text, width) {
   return text.slice(0, low) + '...';
 }
 
-export function drawAnnotationShapes(canvas, items, color, { labels = true, displayWidth = 720 } = {}) {
+export function annotationLabel(item, fields = []) {
+  const parts = item.label ? [item.label] : [];
+  for (const field of fields) {
+    if (!item.customFields || !Object.hasOwn(item.customFields, field)) continue;
+    let value;
+    try { value = JSON.stringify(item.customFields[field]); }
+    catch { value = '[nested JSON]'; }
+    parts.push(`${field}: ${value}`);
+  }
+  return parts.join(' | ');
+}
+
+export function drawAnnotationShapes(canvas, items, color, { labels = true, fields = [], displayWidth = 720 } = {}) {
   const ctx = canvas.getContext('2d'), width = canvas.width, height = canvas.height;
   ctx.clearRect(0, 0, width, height);
   const unit = width / Math.max(120, displayWidth), fontSize = 12 * unit, padding = 4 * unit;
@@ -29,8 +41,9 @@ export function drawAnnotationShapes(canvas, items, color, { labels = true, disp
     ctx.lineWidth = 4 * unit; ctx.strokeStyle = '#08090a'; ctx.stroke();
     ctx.lineWidth = 2 * unit; ctx.strokeStyle = stroke; ctx.stroke();
     if (item.point) { ctx.fillStyle = stroke; ctx.fill(); }
-    const caption = [item.label, item.source ? `[${item.source}]` : ''].filter(Boolean).join(' ');
-    if (!labels || !caption) continue;
+    if (!labels) continue;
+    const caption = [annotationLabel(item, fields), item.source ? `[${item.source}]` : ''].filter(Boolean).join(' ');
+    if (!caption) continue;
     const text = fitText(ctx, caption, Math.max(1, width - 2 * padding));
     const w = Math.min(width, ctx.measureText(text).width + 2 * padding), h = fontSize + 2 * padding;
     const left = Math.max(0, Math.min(width - w, x + (item.point ? 8 * unit : 0)));
@@ -62,14 +75,24 @@ export class AnnotationOverlay {
       <output id="annotation-count" aria-live="off">0 active / 0</output>
     </div>
     <div id="annotation-sources" role="group" aria-label="Annotation sources"></div>
+    <fieldset id="annotation-fields" hidden>
+      <legend>Label fields</legend>
+      <div id="annotation-field-options"></div>
+    </fieldset>
     ${annotationFormatHelp}
     <output id="annotation-status" role="status" hidden></output>`;
     const $ = id => panel.querySelector('#' + id);
-    this.controls = { enabled, open, ...Object.fromEntries(['file', 'clear', 'labels', 'name', 'count', 'status', 'sources']
+    this.controls = { enabled, open, fieldOptions: $('annotation-field-options'), ...Object.fromEntries(['file', 'clear', 'labels', 'name', 'count', 'status', 'sources', 'fields']
       .map(key => [key, $('annotation-' + key)])) };
     this.controls.options = panel;
+    this.globals = api.createPanel({ title: 'Annotations', placement: 'sidebar' });
+    this.globals.id = 'annotation-global';
+    const heading = document.createElement('h2'); heading.textContent = 'Annotations';
+    this.globalList = document.createElement('ul'); this.globalList.id = 'annotation-global-list';
+    this.globals.append(heading, this.globalList);
     this.layer = api.createLayer(); this.raw = this.layer.canvas;
     this.timeline = new AnnotationTimeline([]); this.selected = new Set(); this.revision = 0; this.request = 0; this.selection = 0;
+    this.selectedFields = new Set();
     this.events = new AbortController();
     const on = (element, type, fn) => element.addEventListener(type, fn, { signal: this.events.signal });
     on(this.controls.open, 'click', () => { void this.selectFile(); });
@@ -83,6 +106,12 @@ export class AnnotationOverlay {
       const { source } = event.target.dataset;
       if (source === undefined) return;
       if (event.target.checked) this.selected.add(source); else this.selected.delete(source);
+      this.revision++; this.update(undefined, true);
+    });
+    on(this.controls.fieldOptions, 'change', event => {
+      const { field } = event.target.dataset;
+      if (!this.timeline.fields.includes(field)) return;
+      if (event.target.checked) this.selectedFields.add(field); else this.selectedFields.delete(field);
       this.revision++; this.update(undefined, true);
     });
     this.subscription = api.onFrame(state => this.update(state));
@@ -121,9 +150,12 @@ export class AnnotationOverlay {
       if (this.disposed || request !== this.request) return;
       if (!file.size) throw new Error('The file is empty.');
       if (file.size > annotationLimits.bytes) throw new Error('Annotation files must be 20 MB or smaller.');
-      const data = validateAnnotations(JSON.parse((await file.text()).replace(/^\uFEFF/, '')));
+      const data = validateAnnotations(JSON.parse((await file.text()).replace(/^\uFEFF/, '')), { skipInvalid: true });
       if (this.disposed || request !== this.request) return;
+      const warning = data.skipped ? `Skipped ${data.skipped.toLocaleString('en-US')} invalid annotation${data.skipped === 1 ? '' : 's'}. ${data.issues.join(' ')}${data.skipped > data.issues.length ? ` Only the first ${data.issues.length} errors are shown.` : ''}` : '';
+      if (data.skipped && !data.annotations.length) throw new Error('No valid annotations. ' + warning);
       this.timeline = new AnnotationTimeline(data.annotations);
+      this.skipped = data.skipped;
       this.name = file.name; this.controls.name.textContent = file.name; this.controls.name.title = file.name;
       this.selected = new Set(this.timeline.sources);
       this.colors = new Map(this.timeline.sources.map((source, index) => [source, annotationColor(index)]));
@@ -134,9 +166,20 @@ export class AnnotationOverlay {
         const text = document.createElement('span'); text.textContent = source;
         label.append(input, swatch, text); return label;
       }));
+      this.selectedFields.clear();
+      this.controls.fieldOptions.replaceChildren(...this.timeline.fields.map(field => {
+        const label = document.createElement('label'); label.className = 'toggle annotation-field';
+        const input = document.createElement('input'); input.type = 'checkbox'; input.checked = false; input.dataset.field = field;
+        const text = document.createElement('span'); text.textContent = field;
+        label.append(input, text); return label;
+      }));
+      this.controls.fields.hidden = !this.timeline.fields.length;
       this.controls.enabled.checked = true;
       this.controls.clear.disabled = this.controls.enabled.disabled = this.controls.labels.disabled = false;
-      this.revision++; this.message(''); this.update(undefined, true);
+      this.revision++;
+      this.message(warning ? `Loaded ${data.annotations.length.toLocaleString('en-US')} annotations. ${warning}` : '');
+      if (warning) this.api.showPanel(this.controls.options);
+      this.update(undefined, true);
     } catch (error) {
       if (!this.disposed && request === this.request) {
         this.api.showPanel(this.controls.options); this.message('Annotations unchanged: ' + error.message);
@@ -147,8 +190,10 @@ export class AnnotationOverlay {
   }
   clear() {
     this.request++; this.timeline = new AnnotationTimeline([]); this.selected.clear(); this.colors = new Map(); this.name = null;
+    this.skipped = 0;
     this.controls.name.textContent = 'No annotation file'; this.controls.name.removeAttribute('title');
     this.controls.sources.replaceChildren();
+    this.selectedFields.clear(); this.controls.fieldOptions.replaceChildren(); this.controls.fields.hidden = true;
     this.controls.clear.disabled = this.controls.enabled.disabled = this.controls.labels.disabled = true;
     this.controls.enabled.checked = false;
     this.controls.options.removeAttribute('aria-busy'); this.message(''); this.update(undefined, true);
@@ -156,6 +201,7 @@ export class AnnotationOverlay {
   message(text) { this.controls.status.textContent = text; this.controls.status.hidden = !text; }
   update(state = this.api.getState(), force = false) {
     if (this.disposed) return;
+    this.controls.fields.disabled = !this.controls.labels.checked;
     const active = this.timeline.at(state.time).filter(item => !item.source || this.selected.has(item.source));
     const enabled = this.controls.enabled.checked && state.hasVideo;
     this.active = enabled ? active.length : 0;
@@ -165,19 +211,44 @@ export class AnnotationOverlay {
       active.map(item => item.index).join(',')].join('|');
     if (!force && this.key === key) return;
     this.key = key;
-    if (!enabled || !active.length || !width || !height) { this.layer.update({ visible: false }); return; }
+    const fields = this.timeline.fields.filter(field => this.selectedFields.has(field));
+    const globals = enabled && this.controls.labels.checked ? active.filter(item => !item.bbox && !item.point && item.label) : [];
+    const globalKey = [this.revision, globals.map(item => item.index).join(',')].join('|');
+    // Geometry and camera updates must not reset scrolling through unchanged sidebar text.
+    if (this.globalKey !== globalKey) {
+      this.globalKey = globalKey;
+      this.globals.hidden = !globals.length;
+      this.globalList.replaceChildren();
+      for (const item of globals) {
+        const row = document.createElement('li');
+        const swatch = document.createElement('span'); swatch.className = 'annotation-swatch';
+        swatch.style.backgroundColor = this.colors.get(item.source) || annotationColor(this.colors.size);
+        swatch.setAttribute('aria-hidden', 'true');
+        const caption = document.createElement('div');
+        const label = document.createElement('span'); label.textContent = annotationLabel(item, fields);
+        caption.append(label);
+        if (item.source) {
+          const source = document.createElement('span'); source.className = 'annotation-global-source'; source.textContent = item.source;
+          caption.append(source);
+        }
+        row.append(swatch, caption); this.globalList.append(row);
+      }
+    }
+    const shapes = active.filter(item => item.bbox || item.point);
+    if (!enabled || !shapes.length || !width || !height) { this.layer.update({ visible: false }); return; }
     const scale = Math.min(2, 2048 / Math.max(width, height));
     const rawWidth = Math.max(1, Math.round(width * scale)), rawHeight = Math.max(1, Math.round(height * scale));
     if (this.raw.width !== rawWidth || this.raw.height !== rawHeight) { this.raw.width = rawWidth; this.raw.height = rawHeight; }
-    drawAnnotationShapes(this.raw, enabled ? active : [], source => this.colors.get(source) || annotationColor(this.colors.size), {
-      labels: this.controls.labels.checked, displayWidth: sourceDisplayWidth,
+    drawAnnotationShapes(this.raw, shapes, source => this.colors.get(source) || annotationColor(this.colors.size), {
+      labels: this.controls.labels.checked, fields, displayWidth: sourceDisplayWidth,
     });
     this.layer.update({ visible: true });
   }
   getState() {
-    return { name: this.name, total: this.timeline.total, active: this.active,
+    return { name: this.name, total: this.timeline.total, active: this.active, skipped: this.skipped,
       enabled: this.controls.enabled.checked, labels: this.controls.labels.checked,
-      sources: this.timeline.sources, selected: [...this.selected] };
+      sources: this.timeline.sources, selected: [...this.selected],
+      fields: this.timeline.fields, selectedFields: this.timeline.fields.filter(field => this.selectedFields.has(field)) };
   }
   dispose() {
     this.disposed = true; this.request++; this.events.abort(); this.subscription.dispose(); this.dropSubscription.dispose(); this.layer.dispose();

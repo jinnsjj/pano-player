@@ -6,9 +6,10 @@ const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 
-async function setup({ directory, remote = false, hostFileUris = false, readAnnotation, configurationName = 'session.json' } = {}) {
+async function setup({ directory, remote = false, hostFileUris = false, readAnnotation, writeClipboard, configurationName = 'session.json' } = {}) {
   const files = [], replies = [], rootsSeen = [], commands = new Map(), opened = [], dialogs = [], errors = [];
   const disposals = new Set();
+  const clipboard = [];
   let provider, receive;
   const disposable = { dispose() {} };
   const makeUri = (filename, scheme = remote && !hostFileUris ? 'vscode-remote' : 'file', authority = scheme === 'vscode-remote' ? 'ssh-remote+test' : '', query = '') => ({
@@ -25,7 +26,10 @@ async function setup({ directory, remote = false, hostFileUris = false, readAnno
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/extension.cjs'), 'utf8'), {
     module, require(name) {
       if (name === 'vscode') return {
-        env: { remoteName: remote ? 'ssh-remote' : undefined }, Uri,
+        env: { remoteName: remote ? 'ssh-remote' : undefined, clipboard: { async writeText(text) {
+          if (writeClipboard) await writeClipboard(text);
+          clipboard.push(text);
+        } } }, Uri,
         window: {
           createOutputChannel: () => ({ ...disposable, appendLine() {} }),
           registerCustomEditorProvider: (id, value) => { provider = value; return disposable; },
@@ -58,7 +62,7 @@ async function setup({ directory, remote = false, hostFileUris = false, readAnno
   };
   const document = await provider.openCustomDocument(makeUri(path.join(directory, configurationName)));
   await provider.resolveCustomEditor(document, panel);
-  return { document, files, replies, rootsSeen, panel, commands, opened, dialogs, errors,
+  return { document, files, replies, rootsSeen, panel, commands, opened, dialogs, errors, clipboard,
     send: message => receive({ session: 'manifest-host-session', ...message }), dispose() { for (const fn of disposals) fn(); } };
 }
 
@@ -174,5 +178,56 @@ test('webview reload reapplies JSON sources while rejecting old annotation resul
     await new Promise(setImmediate);
     assert.equal(s.replies.length, 3); assert.equal(s.replies[2].session, 'reloaded');
     assert.equal(s.replies[2].file.name, 'new.json'); s.dispose();
+  });
+});
+
+test('copy uses the opened JSONPP or video path on local and Remote hosts, never a webview-supplied path', async () => {
+  await fixture(async directory => {
+    await fsp.copyFile(path.join(directory, 'session.json'), path.join(directory, 'session.jsonpp'));
+    for (const configurationName of ['session.jsonpp', 'media/video # %.mp4']) {
+      for (const remote of [false, true]) {
+        const s = await setup({ directory, remote, configurationName });
+        s.send({ type: 'copy-media-time', id: 1, path: '/wrong.mp4', playback: { time: 3.125 } });
+        await until(() => s.replies.some(reply => reply.type === 'media-time-copied'));
+        assert.equal(s.clipboard[0], path.join(directory, configurationName) + '\ntime: 3.125 s');
+        assert.equal(s.replies.at(-1).error, undefined);
+        assert.equal(s.replies.at(-1).session, 'manifest-host-session');
+        s.send({ type: 'copy-media-time', id: 2, playback: { loop: { start: 2, end: 5.5 } } });
+        await until(() => s.replies.at(-1).id === 2);
+        assert.equal(s.clipboard[1], path.join(directory, configurationName) + '\nrange: 2.000 - 5.500 s');
+        const count = s.clipboard.length;
+        s.dispose(); s.send({ type: 'copy-media-time', id: 3, playback: { time: 0 } });
+        await new Promise(setImmediate); assert.equal(s.clipboard.length, count);
+      }
+    }
+  });
+});
+
+test('copy validates request identity and timing, and reports clipboard failures without success', async () => {
+  await fixture(async directory => {
+    const s = await setup({ directory });
+    for (const extra of [{ id: 0 }, { id: 1.5 }, { id: 1, session: '' }, { id: 1, session: 'x'.repeat(65) }]) {
+      s.send({ type: 'copy-media-time', playback: { time: 1 }, ...extra });
+    }
+    assert.equal(s.replies.length, 0); assert.equal(s.clipboard.length, 0);
+    s.send({ type: 'copy-media-time', id: 1, playback: { time: '1' } });
+    await until(() => s.replies.length === 1);
+    assert.match(s.replies[0].error, /Invalid/); assert.equal(s.clipboard.length, 0); s.dispose();
+    const failing = await setup({ directory, writeClipboard: async () => { throw new Error('Clipboard unavailable'); } });
+    failing.send({ type: 'copy-media-time', id: 2, playback: { time: 1 } });
+    await until(() => failing.replies.length === 1);
+    assert.match(failing.replies[0].error, /Clipboard unavailable/); assert.equal(failing.clipboard.length, 0); failing.dispose();
+  });
+});
+
+test('pending copies are bounded and editor disposal suppresses late results', async () => {
+  await fixture(async directory => {
+    let finish;
+    const s = await setup({ directory, writeClipboard: () => new Promise(resolve => { finish = resolve; }) });
+    s.send({ type: 'copy-media-time', id: 1, playback: { time: 1 } });
+    s.send({ type: 'copy-media-time', id: 2, playback: { time: 2 } });
+    assert.equal(s.replies.length, 1); assert.match(s.replies[0].error, /in progress/);
+    s.dispose(); finish(); await new Promise(setImmediate);
+    assert.equal(s.replies.length, 1);
   });
 });

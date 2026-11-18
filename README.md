@@ -65,8 +65,9 @@ Auto reevaluates each video, rotation and stereo layout. It is a heuristic, not 
 **Rotation** corrects the source image clockwise by **0°, 90°, 180° or 270°** before stereo cropping and projection. Panorama, Perspective and the overview use the same corrected image; audio and direction overlays stay in their original coordinate system.
 
 **Annotation** is a bundled, open-source plugin, enabled by default. Expand
-**Overlay > Annotation** to open a local JSON file with timed bbox or point
-annotations, labels and independent source filters. See the [annotation format](docs/ANNOTATIONS.md).
+**Overlay > Annotation** to open a local JSON file with timed region, point or
+text annotations and independent source filters. Labels without a region or
+point appear beside the video. See the [annotation format](docs/ANNOTATIONS.md).
 Additional plugins can add settings and source-aligned canvas layers without
 changing the player and can be installed separately.
 See the [plugin interface and installation guide](docs/PLUGINS.md).
@@ -121,7 +122,7 @@ are not supported.
 - **MP4, WebM, MOV, MKV, WAV and FLAC** are available in Open With. Playback depends on the codecs inside each file.
 - **FLAC** uses incremental decoding through the host browser's WebCodecs FLAC decoder, preserving the source channels without a whole-file conversion; codec support depends on the host browser.
 - **Local, Remote SSH, and Cloud IDE** media are read from the workspace host, without manually downloading the entire file first.
-- **No extra decoder setup**: no user-installed FFmpeg, FFprobe, Python, server, or port forwarding.
+- **Bundled decoding** needs no user-installed FFmpeg, FFprobe, Python, server, or port forwarding. An optional macOS host FFmpeg installation enables system-assisted HEVC playback described below.
 - **Source files stay unchanged**, and media is not uploaded to third-party processing services.
 
 **Audio > Track** combines source filenames and their tracks in one menu, including track names, languages, channel counts and codecs. The folder button adds audio from another WAV, FLAC, MP4, WebM, MOV or MKV file; choose an entry from the original file to switch back. Four-channel FOA and six-channel FOA+HL tracks use spatial processing, and other channel counts use Bypass. Sources and track choices last only for the current session.
@@ -133,6 +134,8 @@ The seek bar shows a separate envelope for every decoded source channel, generat
 Mapping keeps the source channel count unchanged and runs before FOA channel-order conversion, normalization, binaural/stereo rendering and HL mixing. PowerMap follows mapped FOA, while envelopes remain original-source data. Mappings are session-local: same-channel-count track/source switches retain them; a different channel count starts with Direct. Multiple inputs sum at unity gain without automatic attenuation or limiting and may clip.
 
 Video decoding depends on the host browser's WebCodecs support. Perspective view, EAC, rotation and single-eye cropping require WebGL2. Audio playback supports up to the browser's 32-channel limit; higher-channel sources can still display envelopes when their codec is supported. Output channel mapping depends on Web Audio and the playback device. FuMa normalization and arbitrary cube-face layouts are not supported.
+
+For HEVC Main SDR files that VS Code cannot decode natively, trusted macOS workspaces automatically use an installed **FFmpeg** with **VideoToolbox** hardware decoding. Video is hardware-encoded to a live H.264 stream that the webview can consume; playback does not wait for whole-file conversion and no video cache is written. Seeking restarts the stream at the requested time. This is a lossy display bridge, limited to 4096 pixels per dimension with aspect ratio preserved, not an original-quality export or zero-copy HEVC presentation. Original files, audio channels and timing stay unchanged. Main 10/HDR are not converted. Without macOS, FFmpeg or workspace trust, playback keeps the bundled software decoder, which may not reach real time for high-resolution HEVC. Browser-native HEVC playback is unchanged.
 
 ## Open Your Media
 

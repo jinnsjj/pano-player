@@ -4,11 +4,11 @@ const vm = require('node:vm');
 const { buildSync } = require('esbuild');
 const bundle = buildSync({ entryPoints: [require.resolve('../media/viewport-resize.js')], bundle: true,
   format: 'cjs', write: false }).outputFiles[0].text;
-function setup() {
+function setup({ sidebarHeight = 0 } = {}) {
   const handlers = {}, attributes = {}, values = {};
   let captured, sync, pending, disconnected = false, aspect = 16 / 9;
   const layout = { clientHeight: 1100 }, transport = { getBoundingClientRect: () => ({ height: 65 }) };
-  const stage = { parentElement: { clientWidth: 1008 },
+  const stage = { parentElement: { clientWidth: 1008, getBoundingClientRect: () => ({ height: 400 }) },
     style: { setProperty: (key, value) => { values[key] = value; }, removeProperty: key => { delete values[key]; } },
     getBoundingClientRect: () => ({ height: Math.min(parseFloat(values['--stage-height']) || 400,
       parseFloat(values['--stage-max-height']) || Infinity, 960 / aspect) }) };
@@ -23,7 +23,8 @@ function setup() {
       borderTopWidth: '1', borderBottomWidth: '1', getPropertyValue: () => String(aspect) }),
     ResizeObserver: class { constructor(fn) { sync = fn; } observe() {} disconnect() { disconnected = true; } } };
   vm.runInNewContext(bundle, context);
-  const dispose = context.module.exports.attachViewportResize(stage, handle, layout, transport);
+  const viewport = sidebarHeight ? { getBoundingClientRect: () => ({ height: 434 + sidebarHeight }) } : stage.parentElement;
+  const dispose = context.module.exports.attachViewportResize(stage, handle, layout, transport, viewport);
   const fire = (name, overrides = {}) => handlers[name]({ button: 0, isPrimary: true, pointerId: 1, clientY: 500,
     preventDefault() {}, stopPropagation() {}, ...overrides });
   const flush = () => { const fn = pending; pending = undefined; fn?.(); };
@@ -60,6 +61,13 @@ test('short windows and wrapped transport reserve scrollable settings without lo
   assert.equal(s.values['--stage-max-height'], '540px');
   s.fire('dblclick'); assert.equal(s.values['--stage-height'], undefined);
   assert.equal(s.stage.getBoundingClientRect().height, 400);
+  s.dispose();
+});
+test('stacked sidebar height is reserved alongside viewport padding and transport', () => {
+  const s = setup({ sidebarHeight: 100 });
+  s.layout.clientHeight = 360; s.sync();
+  assert.equal(s.values['--stage-max-height'], '17px');
+  s.fire('keydown', { key: 'End' }); assert.equal(s.values['--stage-height'], '17px');
   s.dispose();
 });
 test('keyboard, reset, ratio changes and pointer cancellation remain usable', () => {

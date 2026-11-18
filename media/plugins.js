@@ -3,9 +3,9 @@ import { OverlayLayer } from './overlay-layer.js';
 import { attachOverlayDisclosure } from './overlay-controls.js';
 
 export class PlayerPlugins {
-  constructor({ getState, getView, stage, panels, overlays, projectionUrl, icons, onError, selectJsonFile,
+  constructor({ getState, getView, stage, panels, overlays, sidebar, projectionUrl, icons, onError, selectJsonFile,
     load = url => import(url) }) {
-    Object.assign(this, { getState, getView, stage, panels, overlays, projectionUrl, icons, onError, selectJsonFile, load });
+    Object.assign(this, { getState, getView, stage, panels, overlays, sidebar, projectionUrl, icons, onError, selectJsonFile, load });
     this.entries = new Map();
   }
   sync(descriptors = []) {
@@ -60,10 +60,17 @@ export class PlayerPlugins {
         },
         createPanel: ({ title, icon = 'layers', placement = 'settings', toggle, actions = [] }) => {
           if (typeof title !== 'string' || !title.trim() || !/^[a-z0-9-]+$/.test(icon)) throw new Error('Invalid panel title or icon.');
-          if (!['settings', 'overlay'].includes(placement)) throw new Error('Invalid panel placement.');
+          if (!['settings', 'overlay', 'sidebar'].includes(placement)) throw new Error('Invalid panel placement.');
           if (toggle !== undefined && (placement !== 'overlay' || toggle?.type !== 'checkbox')) throw new Error('Overlay toggle must be a checkbox input.');
           if (!Array.isArray(actions) || actions.some(action => action?.tagName !== 'BUTTON') ||
             (actions.length && placement !== 'overlay')) throw new Error('Overlay actions must be button elements.');
+          if (placement === 'sidebar') {
+            if (!this.sidebar) throw new Error('Sidebar panels are unavailable.');
+            const section = document.createElement('section'); section.className = 'plugin-sidebar-panel';
+            section.dataset.plugin = descriptor.id; section.setAttribute('aria-label', title); section.hidden = true;
+            this.sidebar.append(section);
+            own({ dispose() { section.remove(); } }); return section;
+          }
           if (placement === 'overlay') {
             if (!this.overlays) throw new Error('Overlay controls are unavailable.');
             const group = document.createElement('div'); group.className = 'overlay-control';
